@@ -44,10 +44,12 @@ export function monthlySeries(
       const p = pos[l.a] || (pos[l.a] = { q: 0, cost: 0, c: l.c });
       p.c = l.c;
       if (l.t === 'P') { prov += l.v; continue; }
-      const f = l.t === 'C' ? l.v : l.t === 'V' ? -l.v : 0;
+      const custoAntes = p.cost;
+      applyLanc(p, l);
+      // Venda sem valor informado (vencimento de CDB) sai pelo custo, como no cálculo da posição.
+      const f = l.t === 'C' ? l.v : l.t === 'V' ? -(l.v || custoAntes - p.cost) : 0;
       fluxo += f;
       pesado += f * (dias - dayOf(l.d)) / dias; // aporte no fim do dia conta pelos dias restantes
-      applyLanc(p, l);
     }
     let v = 0, custo = 0;
     const semPreco: string[] = [];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createCotahistAccumulator, monthRange, parseMbCandles, parseTesouroCsv, tesouroKey } from '../scripts/lib.mjs';
+import { anoNoNome, createCotahistAccumulator, monthRange, parseMbCandles, parseTesouroCsv, tesouroKey } from '../scripts/lib.mjs';
 
 // Linhas no layout oficial do arquivo COTAHIST da B3 (cotações públicas).
 const linha = (data: string, bdi: string, ticker: string, nome: string, fech: string) =>
@@ -37,6 +37,11 @@ describe('Tesouro Transparente', () => {
     expect(r.p['TESOURO IPCA+ 2029']).toEqual([3440, 3470.22, 3472.5]);
     expect(r.u['TESOURO SELIC 2029']).toEqual([19970.63, '2026-10-01']);
     expect(r.ultimo).toBe('2026-10-01');
+  });
+  it('Renda+ e Educa+ usam o ano do nome, não o vencimento final', () => {
+    expect(anoNoNome('Tesouro Renda+ Aposentadoria Extra', 2084)).toBe(2065);
+    expect(anoNoNome('Tesouro Educa+', 2030)).toBe(2026);
+    expect(anoNoNome('Tesouro IPCA+', 2029)).toBe(2029);
   });
   it('a chave casa com o nome que vem da B3', () => {
     expect(tesouroKey('Tesouro IPCA+ com Juros Semestrais 2035')).toBe('TESOURO IPCA+ COM JUROS SEMESTRAIS 2035');

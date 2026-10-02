@@ -9,7 +9,9 @@ export interface ResultadoLeitura {
   kind: '' | 'Negociação' | 'Movimentação';
 }
 
-const PROVENTO = /dividendo|juros sobre capital|rendimento|amortizacao|restituicao de capital|^juros$/;
+const PROVENTO = /dividendo|juros sobre capital|rendimento|amortizacao|restituicao de capital|^juros$|^reembolso$/;
+/** Renda fixa privada vem como "CDB - CDB222ABCDE - BANCO X": usa o código do título. */
+const RENDA_FIXA = /^(CDB|LCI|LCA|LC|LF|CRI|CRA|DEB|DEBENTURE)$/;
 const AJUSTE = /^(desdobro|grupamento|bonificacao em ativos|fracao em ativos)$/;
 
 /**
@@ -17,7 +19,9 @@ const AJUSTE = /^(desdobro|grupamento|bonificacao em ativos|fracao em ativos)$/;
  * - Negociação: compras e vendas na bolsa.
  * - Movimentação: proventos, Tesouro Direto (compra, venda, resgate) e eventos
  *   que mudam a quantidade (desdobro, grupamento, bonificação).
- * As liquidações da Movimentação são ignoradas porque repetem a Negociação.
+ * Ficam de fora: liquidações (repetem a Negociação), transferências entre custódias,
+ * empréstimo de ações (as ações continuam suas), "Atualização" (só informativa) e
+ * direitos de subscrição não exercidos/cedidos.
  */
 export function rowsToLancs(rows: Linha[]): ResultadoLeitura {
   const out: Lancamento[] = [];
@@ -44,24 +48,29 @@ export function rowsToLancs(rows: Linha[]): ResultadoLeitura {
       const d = parseDate(r['data']);
       const mvRaw = String(r['movimentacao'] ?? '').trim();
       const mv = norm(mvRaw);
-      const a = cleanTicker(String(r['produto'] ?? '').split(' - ')[0]);
+      const partes = String(r['produto'] ?? '').split(' - ').map(x => x.trim());
+      const rf = RENDA_FIXA.test(cleanTicker(partes[0])) && partes[1];
+      const a = cleanTicker(rf ? partes[1] : partes[0]);
       const q = Math.abs(parseNum(r['quantidade']));
       const p = parseNum(r['preco unitario']);
       let v = Math.abs(parseNum(r['valor da operacao']));
       const credito = norm(r['entrada/saida'] ?? 'credito') === 'credito';
       if (!d || !a) { ignored++; continue; }
-      const c = guessClass(a);
+      const c = rf ? 'outro' : guessClass(a);
       if (PROVENTO.test(mv)) {
         if (!credito || !v) { ignored++; continue; }
-        out.push({ id: newId(), d, t: 'P', a, c, q: 0, p: 0, v, o: 'b3', n: mvRaw });
+        out.push({ id: newId(), d, t: 'P', a, c, q: 0, p: 0, v, o: 'b3', n: mv === 'reembolso' ? 'Reembolso (ações emprestadas)' : mvRaw });
       } else if (mv === 'leilao de fracao') {
         if (!credito || !v) { ignored++; continue; }
         out.push({ id: newId(), d, t: 'P', a, c, q: 0, p: 0, v, o: 'b3', n: 'Leilão de fração' });
-      } else if (mv === 'compra' || mv === 'venda' || mv === 'resgate') {
+      } else if (mv === 'compra' || mv === 'venda' || mv === 'resgate' || mv === 'vencimento' || mv === 'compra / venda') {
+        // Tesouro Direto e renda fixa: compra, venda, resgate antecipado e vencimento.
         if (!q) { ignored++; continue; }
         if (!v) v = q * p;
-        const t = mv === 'compra' ? 'C' : 'V';
-        out.push({ id: newId(), d, t, a, c, q, p: p || v / q, v, o: 'b3', ...(mv === 'resgate' ? { n: 'Resgate' } : {}) });
+        const t = mv === 'compra' || (mv === 'compra / venda' && credito) ? 'C' : 'V';
+        const n = mv === 'resgate' ? 'Resgate' : mv === 'vencimento' ? 'Vencimento' : undefined;
+        // Vencimento sem valor (comum em CDB): v = 0 e a venda sai pelo custo, sem lucro nem prejuízo.
+        out.push({ id: newId(), d, t, a, c, q, p: p || (q ? v / q : 0), v, o: 'b3', ...(n ? { n } : {}) });
       } else if (AJUSTE.test(mv)) {
         if (!q) { ignored++; continue; }
         const custo = mv === 'bonificacao em ativos' && credito ? (v || q * p) : 0;

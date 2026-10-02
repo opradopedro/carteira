@@ -65,6 +65,18 @@ export function monthRange(start, end) {
   return out;
 }
 
+/**
+ * Ano que aparece no nome do título (e na planilha da B3). Para Renda+ e Educa+ o
+ * nome usa o ano em que começam os pagamentos, não o vencimento final do CSV:
+ * Renda+ 2065 vence em 2084 (20 anos de pagamentos); Educa+ 2026 vence em 2030 (5 anos).
+ */
+export function anoNoNome(tipo, anoVenc) {
+  const t = tesouroKey(tipo);
+  if (t.startsWith('TESOURO RENDA+')) return anoVenc - 19;
+  if (t.startsWith('TESOURO EDUCA+')) return anoVenc - 4;
+  return anoVenc;
+}
+
 const brNum = s => parseFloat(String(s).replace(/\./g, '').replace(',', '.'));
 const brDate = s => { const [d, m, y] = String(s).trim().split('/'); return `${y}-${m}-${d}`; };
 
@@ -90,7 +102,7 @@ export function parseTesouroCsv(text, startMonth) {
     const data = brDate(c[iData]);
     const pu = brNum(c[iPu]);
     if (!(pu > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(data)) continue;
-    const key = tesouroKey(`${c[iTipo]} ${c[iVenc].trim().slice(-4)}`);
+    const key = tesouroKey(`${c[iTipo]} ${anoNoNome(c[iTipo], parseInt(c[iVenc].trim().slice(-4), 10))}`);
     const ym = data.slice(0, 7);
     if (data > ultimo) ultimo = data;
     if (!ult[key] || data > ult[key][1]) ult[key] = [pu, data];

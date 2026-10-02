@@ -48,6 +48,10 @@ tests/         testes Vitest
 
 ## Limitações conhecidas
 
-- Mudança de código de ativo (incorporações, "Atualização" na Movimentação) não é tratada automaticamente: ajuste com lançamentos manuais.
+- Compras e vendas na bolsa vêm só da planilha de **Negociação**; a de Movimentação traz proventos, Tesouro e eventos.
+- Mudança de código de ativo (incorporações, cisões) não é tratada automaticamente: ajuste com lançamentos manuais.
+- Empréstimo de ações é ignorado (as ações continuam suas); o reembolso de proventos entra como provento. A taxa recebida pelo aluguel não vem na planilha.
+- CDB/LCI/LCA aparecem pelo valor aplicado; no vencimento sem valor informado, saem pelo custo (sem rendimento).
+- Direitos de subscrição não exercidos ou cedidos são ignorados; se exercer, lance a compra.
 - O histórico usa o fechamento do último pregão de cada mês; o mês atual usa as cotações do momento.
 - Taxas de corretagem não entram no custo (a planilha da B3 não as traz).

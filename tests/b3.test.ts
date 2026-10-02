@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
 import { mergeImport, rowsToLancs } from '../src/core/b3';
+import { compute } from '../src/core/calc';
 
 // Dados fictícios, no formato das planilhas da Área do Investidor da B3.
 const negociacao = [
@@ -72,6 +73,33 @@ describe('rowsToLancs — Movimentação', () => {
   it('ignora liquidações e tipos que o app não usa', () => {
     expect(r.lancs.some(l => l.a === 'ITSA1')).toBe(false);
     expect(r.ignored).toBe(3); // débito de dividendo, liquidação, direito de subscrição
+  });
+});
+
+describe('rowsToLancs — casos vistos em extrato real (valores fictícios)', () => {
+  const linhas = [
+    { 'Entrada/Saída': 'Credito', 'Data': '21/09/2026', 'Movimentação': 'Reembolso', 'Produto': 'ABCD4 - EMPRESA FICTICIA S.A.        ', 'Instituição': 'CORRETORA X', 'Quantidade': 0, 'Preço unitário': '-', 'Valor da Operação': 43.38 },
+    { 'Entrada/Saída': 'Credito', 'Data': '01/09/2026', 'Movimentação': 'Empréstimo', 'Produto': 'ABCD4 - EMPRESA FICTICIA S.A.', 'Instituição': 'CORRETORA X', 'Quantidade': 150, 'Preço unitário': '-', 'Valor da Operação': 6282 },
+    { 'Entrada/Saída': 'Credito', 'Data': '24/08/2026', 'Movimentação': 'Atualização', 'Produto': 'ABCD4 - EMPRESA FICTICIA S.A.', 'Instituição': 'CORRETORA X', 'Quantidade': 150, 'Preço unitário': '-', 'Valor da Operação': '-' },
+    { 'Entrada/Saída': 'Credito', 'Data': '13/05/2022', 'Movimentação': 'COMPRA / VENDA', 'Produto': 'CDB - CDB000FICT - BANCO FICTICIO S/A', 'Instituição': 'CORRETORA X', 'Quantidade': 500, 'Preço unitário': 1, 'Valor da Operação': 500 },
+    { 'Entrada/Saída': 'Debito', 'Data': '11/08/2022', 'Movimentação': 'VENCIMENTO', 'Produto': 'CDB - CDB000FICT - BANCO FICTICIO S/A', 'Instituição': 'CORRETORA X', 'Quantidade': 500, 'Preço unitário': 0, 'Valor da Operação': 0 },
+    { 'Entrada/Saída': 'Credito', 'Data': '02/01/2026', 'Movimentação': 'Compra', 'Produto': 'Tesouro Renda+ Aposentadoria Extra 2065', 'Instituição': 'CORRETORA X', 'Quantidade': 0.75, 'Preço unitário': 178.24, 'Valor da Operação': 133.68 },
+  ];
+  const r = rowsToLancs(linhas);
+  it('reembolso de proventos de ações emprestadas conta como provento', () => {
+    expect(r.lancs.find(l => l.t === 'P')).toMatchObject({ a: 'ABCD4', v: 43.38, n: 'Reembolso (ações emprestadas)' });
+  });
+  it('empréstimo de ações e atualização não mexem na posição', () => {
+    expect(r.lancs.filter(l => l.a === 'ABCD4')).toHaveLength(1);
+  });
+  it('CDB usa o código do título; vencimento sem valor sai pelo custo', () => {
+    const cdb = r.lancs.filter(l => l.a === 'CDB000FICT');
+    expect(cdb.map(l => [l.t, l.c, l.q, l.v])).toEqual([['C', 'outro', 500, 500], ['V', 'outro', 500, 0]]);
+    const m = compute(cdb, {});
+    expect(m.list[0]).toMatchObject({ q: 0, real: 0 });
+  });
+  it('Renda+ mantém o nome com o ano da aposentadoria', () => {
+    expect(r.lancs.at(-1)).toMatchObject({ a: 'TESOURO RENDA+ APOSENTADORIA EXTRA 2065', c: 'tesouro', t: 'C' });
   });
 });
 

@@ -38,6 +38,12 @@ describe('monthlySeries', () => {
     expect(s.at(-1)!.d).toBe('2025-02-10');
   });
 
+  it('venda sem valor (vencimento de CDB) não vira prejuízo na rentabilidade', () => {
+    const s = monthlySeries([L('2025-01-31', 'C', 10, 100), L('2025-02-10', 'V', 10, 0, 0)], () => null, '2025-02-28');
+    expect(s[1].v).toBe(0);
+    expect(s[1].r).toBeCloseTo(0);
+  });
+
   it('sem cotação histórica, avalia pelo custo e avisa', () => {
     const s = monthlySeries([L('2025-01-31', 'C', 10, 100)], () => null, '2025-02-28');
     expect(s[1].v).toBe(1000);

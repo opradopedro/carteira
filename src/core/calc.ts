@@ -24,7 +24,8 @@ export function applyLanc(p: { q: number; cost: number }, l: Lancamento): number
     const pm = p.q > 0 ? p.cost / p.q : 0;
     const qs = Math.min(l.q, p.q);
     const saiu = pm * qs;
-    const vendido = qs < l.q && l.q > 0 ? l.v * (qs / l.q) : l.v;
+    // Sem valor informado (ex.: vencimento de CDB sem valor na planilha): sai pelo custo.
+    const vendido = l.v === 0 ? saiu : qs < l.q && l.q > 0 ? l.v * (qs / l.q) : l.v;
     p.q -= qs; p.cost -= saiu;
     if (p.q < 1e-9) { p.q = 0; p.cost = 0; }
     return vendido - saiu;
