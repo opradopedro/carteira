@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Minha Carteira</title>
+  <meta name="description" content="Acompanhamento de investimentos pessoais. Seus dados ficam só no aparelho.">
+  <meta name="theme-color" content="#EEF0F5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0F1220" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="top-title">
+        <h1>Minha Carteira</h1>
+        <div class="sub" id="status">Carregando…</div>
+      </div>
+      <div class="row nowrap">
+        <button class="btn icon" id="btnRefresh" type="button" aria-label="Atualizar cotações" title="Atualizar cotações">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+        </button>
+        <button class="btn icon" id="btnAjustes" type="button" aria-label="Ajustes" title="Ajustes">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="banner" id="banner" hidden></div>
+
+    <main>
+      <section id="tab-resumo" class="wrap"></section>
+      <section id="tab-ativos" class="wrap" hidden></section>
+      <section id="tab-proventos" class="wrap" hidden></section>
+      <section id="tab-lancamentos" class="wrap" hidden></section>
+      <section id="tab-ajustes" class="wrap" hidden></section>
+    </main>
+  </div>
+
+  <nav aria-label="Seções"><div>
+    <button type="button" data-tab="resumo">Resumo</button>
+    <button type="button" data-tab="ativos">Ativos</button>
+    <button type="button" data-tab="proventos">Proventos</button>
+    <button type="button" data-tab="lancamentos">Lançamentos</button>
+  </div></nav>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

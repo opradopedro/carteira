@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dev-dist/
+.cache/
+*.log
+# Nunca versionar dados pessoais: planilhas da B3 e backups da carteira
+*.xlsx
+*.xls
+*.csv
+carteira-backup*.json
+backup*.json
