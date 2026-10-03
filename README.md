@@ -5,6 +5,7 @@ PWA pessoal para acompanhar investimentos (ações, FIIs, cripto, Tesouro Direto
 - **Dados 100% locais**: lançamentos, cotações e configurações ficam no IndexedDB do aparelho. Backup e restauração por arquivo JSON.
 - **Funciona offline**: o app fica em cache (service worker) e mostra as últimas cotações salvas.
 - **Entrada de dados**: planilhas de Negociação e Movimentação da Área do Investidor da B3 (reimportar não duplica), planilha de Eventos (proventos a receber) e lançamento manual.
+- **Pendências**: tela que lista o que precisa de ação manual (valor de resgate de CDB, ativo sem cotação, posição vendida, backup atrasado).
 - **Cotações uma vez por dia**: na primeira abertura do dia e no botão Atualizar, para poupar os limites gratuitos das APIs.
 - **Cotações**: só os códigos dos ativos saem do aparelho.
 
@@ -52,7 +53,8 @@ tests/         testes Vitest
 - Compras e vendas na bolsa vêm só da planilha de **Negociação**; a de Movimentação traz proventos, Tesouro e eventos.
 - Mudança de código de ativo (incorporações, cisões) não é tratada automaticamente: ajuste com lançamentos manuais.
 - Empréstimo de ações é ignorado (as ações continuam suas); o reembolso de proventos entra como provento. A taxa recebida pelo aluguel não vem na planilha.
-- CDB/LCI/LCA aparecem pelo valor aplicado; no vencimento sem valor informado, saem pelo custo (sem rendimento).
+- CDB/LCI/LCA aparecem pelo valor aplicado; o vencimento sem valor vira uma pendência para informar quanto foi recebido.
+- Venda maior que a posição (venda a descoberto) abre posição vendida, fechada pela recompra seguinte.
 - Direitos de subscrição não exercidos ou cedidos são ignorados; se exercer, lance a compra.
 - O histórico usa o fechamento do último pregão de cada mês; o mês atual usa as cotações do momento.
 - Taxas de corretagem não entram no custo (a planilha da B3 não as traz).

@@ -9,9 +9,29 @@ export const sortLancs = (lancs: Lancamento[]): Lancamento[] =>
 
 interface Acum { a: string; c: Posicao['c']; q: number; cost: number; prov: number; prov12: number; real: number }
 
-/** Aplica um lançamento sobre a posição (preço médio pelo custo de aquisição). Devolve o lucro realizado. */
-export function applyLanc(p: { q: number; cost: number }, l: Lancamento): number {
-  if (l.t === 'C') { p.q += l.q; p.cost += l.v; return 0; }
+/** Direitos de subscrição (ex.: CASH1, XPML12): vendê-los sem posição é ganho, não venda a descoberto. */
+export const isDireito = (a: string) => /^[A-Z]{4}(1|2|12|13)$/.test(a);
+
+/**
+ * Aplica um lançamento sobre a posição (preço médio pelo custo de aquisição). Devolve o lucro realizado.
+ * Vender mais do que se tem abre uma posição vendida (quantidade negativa, custo negativo = valor
+ * recebido); a recompra seguinte fecha essa posição e realiza o lucro ou prejuízo.
+ */
+export function applyLanc(p: { q: number; cost: number }, l: Lancamento, a = l.a): number {
+  if (l.t === 'C') {
+    let real = 0, q = l.q, v = l.v;
+    if (p.q < -1e-9 && q > 0) {
+      const qc = Math.min(q, -p.q);
+      const pmVenda = p.cost / p.q;          // preço médio da venda a descoberto
+      const pago = v * (qc / q);
+      real = pmVenda * qc - pago;
+      p.q += qc; p.cost += pmVenda * qc;
+      q -= qc; v -= pago;
+      if (Math.abs(p.q) < 1e-9) { p.q = 0; p.cost = 0; }
+    }
+    p.q += q; p.cost += v;
+    return real;
+  }
   if (l.t === 'S') {
     if (l.q < 0 && p.q > 0) {
       // Grupamento/fração: sai quantidade, custo fica (exceto se zerar a posição).
@@ -21,13 +41,20 @@ export function applyLanc(p: { q: number; cost: number }, l: Lancamento): number
     return 0;
   }
   if (l.t === 'V') {
-    const pm = p.q > 0 ? p.cost / p.q : 0;
-    const qs = Math.min(l.q, p.q);
+    const qs = Math.max(0, Math.min(l.q, p.q));
+    const pm = qs > 0 ? p.cost / p.q : 0;
     const saiu = pm * qs;
     // Sem valor informado (ex.: vencimento de CDB sem valor na planilha): sai pelo custo.
-    const vendido = l.v === 0 ? saiu : qs < l.q && l.q > 0 ? l.v * (qs / l.q) : l.v;
+    if (l.v === 0) { p.q -= qs; p.cost -= saiu; if (Math.abs(p.q) < 1e-9) { p.q = 0; p.cost = 0; } return 0; }
+    const vendido = l.q > 0 ? l.v * (qs / l.q) : l.v;
     p.q -= qs; p.cost -= saiu;
-    if (p.q < 1e-9) { p.q = 0; p.cost = 0; }
+    if (Math.abs(p.q) < 1e-9) { p.q = 0; p.cost = 0; }
+    const excesso = l.q - qs;
+    if (excesso > 1e-9) {
+      const recebido = l.v - vendido;
+      if (isDireito(a)) return vendido - saiu + recebido; // direito sem custo: tudo é ganho
+      p.q -= excesso; p.cost -= recebido;               // abre/aumenta posição vendida
+    }
     return vendido - saiu;
   }
   return 0;
@@ -61,6 +88,7 @@ export function compute(lancs: Lancamento[], precos: Precos, hoje: Date = new Da
     return { ...p, pm: p.q ? p.cost / p.q : 0, px, value, res: value - p.cost };
   }).sort((x, y) => y.value - x.value);
   const open = list.filter(p => p.q > 0);
+  // Posições vendidas (a descoberto) ficam em list com q < 0 e aparecem nas pendências.
   const tot = { value: 0, cost: 0, prov: 0, prov12: 0, realized, res: 0, semCot: 0 };
   for (const p of list) { tot.prov += p.prov; tot.prov12 += p.prov12; }
   for (const p of open) { tot.value += p.value; tot.cost += p.cost; if (!p.px) tot.semCot++; }

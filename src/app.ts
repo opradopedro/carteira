@@ -1,15 +1,16 @@
 // Estado do app e ações que alteram dados. As telas (src/ui/*) só leem daqui.
 import type { Classe, Lancamento, Modelo, Precos } from './core/types';
 import { compute } from './core/calc';
+import { pendencias as calcPendencias, type Pendencia } from './core/pendencias';
 import { monthlySeries, type PontoMes } from './core/perf';
-import { mergeImport, rowsToAReceber, rowsToLancs, type AReceber, type ResultadoLeitura } from './core/b3';
+import { keyOf, mergeImport, rowsToAReceber, rowsToLancs, type AReceber, type ResultadoLeitura } from './core/b3';
 import { addMonths, today, ymd } from './core/util';
 import * as db from './data/db';
 import type { Config, Indices } from './data/db';
 import { Historico } from './quotes/hist';
 import { refreshIndices, refreshQuotes } from './quotes/live';
 
-export type Tab = 'resumo' | 'ativos' | 'proventos' | 'lancamentos' | 'ajustes';
+export type Tab = 'resumo' | 'ativos' | 'proventos' | 'lancamentos' | 'ajustes' | 'pendencias';
 export interface Periodo { tipo: '12m' | 'ano' | 'tudo' | 'y' | 'custom'; ano?: number; ini?: string; fim?: string }
 
 export const state = {
@@ -28,6 +29,8 @@ export const state = {
   avisos: [] as string[],
   persist: false,
   aReceber: null as { em: string; itens: AReceber[] } | null,
+  pendIgnoradas: [] as string[],
+  ultimoBackup: '',
 };
 
 export const hist = new Historico();
@@ -48,6 +51,8 @@ export async function init() {
   const [lancs, precos, cfg, indices, cotEm, aReceber] = await Promise.all([
     db.getLancs(), db.getKV('precos'), db.getKV('config'), db.getKV('indices'), db.getKV('cotEm'), db.getKV('aReceber'),
   ]);
+  state.pendIgnoradas = (await db.getKV('pendIgnoradas')) || [];
+  state.ultimoBackup = (await db.getKV('ultimoBackup')) || '';
   state.aReceber = aReceber || null;
   state.lancs = lancs;
   state.precos = precos || {};
@@ -235,6 +240,41 @@ export async function restoreBackup(lancs: Lancamento[], precosManuais: Precos) 
 
 export async function wipe() {
   await db.clearAll();
-  Object.assign(state, { lancs: [], precos: {}, indices: null, cfg: {}, cotEm: '', falhas: [], avisos: [], aReceber: null });
+  Object.assign(state, { lancs: [], precos: {}, indices: null, cfg: {}, cotEm: '', falhas: [], avisos: [], aReceber: null, pendIgnoradas: [], ultimoBackup: '' });
   recompute(); onChange();
+}
+
+export function listaPendencias(): Pendencia[] {
+  if (!state.ready) return [];
+  return calcPendencias(model, state.lancs, {
+    temToken: !!state.cfg.brapiToken, ultimoBackup: state.ultimoBackup, ignoradas: state.pendIgnoradas,
+  });
+}
+
+export async function ignorarPendencia(id: string) {
+  state.pendIgnoradas = [...new Set([...state.pendIgnoradas, id])];
+  await db.setKV('pendIgnoradas', state.pendIgnoradas);
+  onChange();
+}
+
+export async function marcarBackup() {
+  state.ultimoBackup = new Date().toISOString();
+  await db.setKV('ultimoBackup', state.ultimoBackup);
+  onChange();
+}
+
+/** Corrige um lançamento sem perder a identidade da importação (reimportar não duplica). */
+export async function updateLanc(id: string, patch: Partial<Pick<Lancamento, 'v' | 'p' | 'q' | 'd'>>) {
+  const atual = state.lancs.find(l => l.id === id);
+  if (!atual) return;
+  const novo: Lancamento = { ...atual, ...patch, k0: atual.k0 ?? keyOf(atual) };
+  state.lancs = state.lancs.map(l => (l.id === id ? novo : l));
+  await db.putLancs([novo]);
+  recompute(); onChange();
+}
+
+export async function reverIgnoradas() {
+  state.pendIgnoradas = [];
+  await db.setKV('pendIgnoradas', []);
+  onChange();
 }

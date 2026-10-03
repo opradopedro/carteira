@@ -21,6 +21,10 @@
         <button class="btn icon" id="btnRefresh" type="button" aria-label="Atualizar cotações" title="Atualizar cotações">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
         </button>
+        <button class="btn icon badge-wrap" id="btnPend" type="button" aria-label="Pendências" title="Pendências" data-tab="pendencias">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
+          <span class="badge" id="pendCount" hidden>0</span>
+        </button>
         <button class="btn icon" id="btnAjustes" type="button" aria-label="Ajustes" title="Ajustes">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         </button>
@@ -34,6 +38,7 @@
       <section id="tab-proventos" class="wrap" hidden></section>
       <section id="tab-lancamentos" class="wrap" hidden></section>
       <section id="tab-ajustes" class="wrap" hidden></section>
+      <section id="tab-pendencias" class="wrap" hidden></section>
     </main>
   </div>
 

@@ -1,4 +1,4 @@
-import { model, serie, state, type Periodo } from '../app';
+import { listaPendencias, model, serie, state, type Periodo } from '../app';
 import { benchCurves, cdiAcumulado, ipcaAcumulado, periodResult } from '../core/perf';
 import { CLASSES, type Classe } from '../core/types';
 import { addMonths, today } from '../core/util';
@@ -50,7 +50,9 @@ export function renderResumo() {
   for (const p of open) byC[p.c] = (byC[p.c] || 0) + p.value;
   const cls = (Object.entries(byC) as [Classe, number][]).sort((a, b) => b[1] - a[1]);
 
+  const nPend = listaPendencias().length;
   el.innerHTML = `
+  ${nPend ? `<button type="button" class="pend-card" data-tab="pendencias"><span>${nPend === 1 ? '1 pendência precisa' : nPend + ' pendências precisam'} de você</span><span>Ver ›</span></button>` : ''}
   <div class="panel">
     <div class="hero">
       <span class="label">Patrimônio</span>

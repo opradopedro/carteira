@@ -11,8 +11,9 @@ import { renderAtivos } from './ui/ativos';
 import { renderProventos } from './ui/proventos';
 import { renderLancs, setFiltro } from './ui/lancamentos';
 import { renderAjustes } from './ui/ajustes';
+import { renderBadge, renderPendencias } from './ui/pendencias';
 
-const TABS: Tab[] = ['resumo', 'ativos', 'proventos', 'lancamentos', 'ajustes'];
+const TABS: Tab[] = ['resumo', 'ativos', 'proventos', 'lancamentos', 'ajustes', 'pendencias'];
 
 function applyTheme() {
   const t = state.cfg.tema;
@@ -35,7 +36,6 @@ function renderHeader() {
   const msgs: string[] = [];
   if (state.ready && !online && state.lancs.length) msgs.push('Sem internet: mostrando as últimas cotações salvas.');
   msgs.push(...state.falhas);
-  if (state.tab === 'resumo' || state.tab === 'ativos') msgs.push(...state.avisos);
   if (state.ready && model.tot.semCot) msgs.push(`${model.tot.semCot} ${model.tot.semCot === 1 ? 'ativo está' : 'ativos estão'} sem cotação e aparece${model.tot.semCot === 1 ? '' : 'm'} pelo custo. Informe o preço em Ativos.`);
   bn.hidden = !msgs.length;
   bn.innerHTML = '';
@@ -44,6 +44,7 @@ function renderHeader() {
 
 function render() {
   renderHeader();
+  renderBadge();
   if (state.tab === 'resumo') renderResumo();
   if (state.tab === 'ativos') renderAtivos();
   if (state.tab === 'proventos') renderProventos();
@@ -58,6 +59,7 @@ function setTab(tab: Tab) {
   try { history.replaceState(null, '', '#' + tab); } catch { /* ignora */ }
   window.scrollTo(0, 0);
   if (tab === 'ajustes') renderAjustes();
+  if (tab === 'pendencias') renderPendencias();
   render();
 }
 
@@ -113,6 +115,18 @@ document.addEventListener('click', async e => {
     state.periodo = ds.per === 'y' ? { tipo: 'y', ano: Number(ds.ano) } : ds.per === 'custom' ? { ...state.periodo, tipo: 'custom' } : { tipo: ds.per as Periodo['tipo'] };
     renderRent();
   }
+  else if (ds.venc) {
+    const inp = $<HTMLInputElement>('#venc-' + CSS.escape(ds.venc));
+    const v = parseNum(inp.value);
+    const l = state.lancs.find(x => x.id === ds.venc);
+    if (!(v > 0) || !l) { toast('Informe o valor recebido.'); return; }
+    await app.updateLanc(l.id, { v, p: v / l.q });
+    toast('Valor salvo: o rendimento já entra nos cálculos'); renderPendencias();
+  }
+  else if (ds.ignorar) { await app.ignorarPendencia(ds.ignorar); renderPendencias(); }
+  else if (ds.filtrar) { setFiltro(ds.filtrar); setTab('lancamentos'); $<HTMLInputElement>('#filtro').value = ds.filtrar; renderLancs(); }
+  else if (ds.abrirAtivo) { state.open = ds.abrirAtivo; setTab('ativos'); }
+  else if (t.id === 'btnReverIgnoradas') { await app.reverIgnoradas(); renderPendencias(); }
   else if (ds.open) { state.open = state.open === ds.open ? null : ds.open; renderAtivos(); }
   else if (ds.savepx) {
     const p = parseNum($<HTMLInputElement>('#px').value);
@@ -203,11 +217,21 @@ async function exportBackup() {
   const nome = `carteira-backup-${today()}.json`;
   const file = new File([JSON.stringify(b, null, 1)], nome, { type: 'application/json' });
   try {
-    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: 'Backup da carteira' }); return; }
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Backup da carteira' });
+      await backupFeito(); return;
+    }
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
   }
   downloadJson(b, nome);
+  await backupFeito();
+}
+
+async function backupFeito() {
+  await app.marcarBackup();
+  toast('Backup exportado');
+  if (state.tab === 'pendencias') renderPendencias();
 }
 
 window.addEventListener('online', () => { render(); if (state.lancs.length) app.refresh('diario'); });

@@ -19,6 +19,7 @@ export interface Lancamento {
   v: number;        // valor total da operação
   o: 'b3' | 'manual';
   n?: string;       // descrição (ex.: "Dividendo", "Desdobro")
+  k0?: string;      // chave original da importação, mantida quando o lançamento é corrigido à mão
 }
 
 export interface Cotacao {

@@ -87,7 +87,7 @@ export function rowsToLancs(rows: Linha[]): ResultadoLeitura {
 
 /** Chave que identifica um lançamento para evitar duplicação na reimportação. */
 export const keyOf = (l: Lancamento): string =>
-  [l.d, l.t, l.a, Math.round(l.q * 1e6), Math.round(l.v * 100)].join('|');
+  l.k0 ?? [l.d, l.t, l.a, Math.round(l.q * 1e6), Math.round(l.v * 100)].join('|');
 
 /**
  * Junta lançamentos importados aos existentes sem duplicar.

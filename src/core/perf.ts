@@ -45,7 +45,7 @@ export function monthlySeries(
       p.c = l.c;
       if (l.t === 'P') { prov += l.v; continue; }
       const custoAntes = p.cost;
-      applyLanc(p, l);
+      applyLanc(p, l, l.a);
       // Venda sem valor informado (vencimento de CDB) sai pelo custo, como no cálculo da posição.
       const f = l.t === 'C' ? l.v : l.t === 'V' ? -(l.v || custoAntes - p.cost) : 0;
       fluxo += f;
@@ -54,10 +54,10 @@ export function monthlySeries(
     let v = 0, custo = 0;
     const semPreco: string[] = [];
     for (const [a, p] of Object.entries(pos)) {
-      if (p.q <= 0) continue;
+      if (p.q === 0) continue;
       custo += p.cost;
       const px = priceAt(a, p.c, ym);
-      if (px && px > 0) v += p.q * px;
+      if (px && px > 0) v += p.q * px; // posição vendida (q < 0) entra como dívida
       else { v += p.cost; semPreco.push(a); }
     }
     if (ym === curYm && atual) v = atual.v;

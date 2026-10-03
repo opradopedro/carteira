@@ -23,6 +23,8 @@ interface KV {
   indices: Indices;
   cotEm: string;
   aReceber: { em: string; itens: AReceber[] };
+  pendIgnoradas: string[];
+  ultimoBackup: string;
 }
 
 let dbp: Promise<IDBPDatabase> | null = null;

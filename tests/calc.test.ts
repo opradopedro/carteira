@@ -47,6 +47,32 @@ describe('compute — preço médio e resultado', () => {
   });
 });
 
+describe('compute — venda a descoberto e direitos', () => {
+  it('vender mais do que tem e recomprar zera a posição e realiza o prejuízo da recompra', () => {
+    const m = compute([
+      L('2025-07-17', 'C', 'AAAA3', 205, 20),
+      L('2026-02-18', 'V', 'AAAA3', 205, 25),
+      L('2026-02-18', 'V', 'AAAA3', 205, 25.4),   // vendeu sem ter (vira aluguel)
+      L('2026-02-23', 'C', 'AAAA3', 205, 26.9),   // recompra para devolver
+    ], {}, hoje);
+    const p = m.list[0];
+    expect(p.q).toBe(0);
+    expect(p.cost).toBe(0);
+    expect(p.real).toBeCloseTo(205 * 5 + 205 * (25.4 - 26.9));
+    expect(m.open).toHaveLength(0);
+  });
+  it('enquanto não recompra, a posição fica negativa', () => {
+    const m = compute([L('2026-02-18', 'V', 'AAAA3', 10, 25)], {}, hoje);
+    expect(m.list[0].q).toBe(-10);
+    expect(m.open).toHaveLength(0);
+  });
+  it('vender direito de subscrição sem posição é ganho, não venda a descoberto', () => {
+    const m = compute([L('2023-05-04', 'V', 'CASH1', 1, 0.3)], {}, hoje);
+    expect(m.list[0].q).toBe(0);
+    expect(m.list[0].real).toBeCloseTo(0.3);
+  });
+});
+
 describe('compute — eventos', () => {
   it('desdobro dobra a quantidade e divide o preço médio', () => {
     const m = compute([L('2025-01-10', 'C', 'AAAA3', 100, 20), L('2025-02-01', 'S', 'AAAA3', 100, 0, 0)], {}, hoje);
