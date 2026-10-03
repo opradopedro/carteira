@@ -76,7 +76,7 @@ export function renderResumo() {
     ${chipsIndices()}
   </div>
   <div class="panel clickable" data-page="rent" tabindex="0">
-    <div class="row between"><h2>Rentabilidade em 12 meses</h2>${mais}</div>
+    <div class="row between"><h2>Rendimento em 12 meses</h2>${mais}</div>
     ${c12 ? `<div class="chart" id="chRent"></div>${legendaComparacao()}` : '<div class="empty">Sem dados suficientes.</div>'}
   </div>
   <div class="panel clickable" data-page="evo" tabindex="0">
@@ -91,6 +91,6 @@ export function renderResumo() {
       <div class="name"><span class="dot" style="background:var(--c-${c})"></span>${CLASSES[c] || c}</div><div class="val">${brl.format(o.v)} ›</div>
       <div class="meta ${sign(o.v - o.cost)}">${o.cost ? fmtPct(o.v / o.cost - 1) + ' sobre o investido' : ''}</div><div class="meta r">${tot.value ? fmtNum(o.v / tot.value * 100) : '0'}%</div></button>`).join('')}</div>
   </div>`;
-  if (c12) graficoRent($('#chRent'), c12, serie, 'Rentabilidade');
+  if (c12) graficoRent($('#chRent'), c12, serie, 'Rendimento');
   graficoPatrimonio($('#chEvo'), serie, 'Patrimônio');
 }

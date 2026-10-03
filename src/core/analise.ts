@@ -56,6 +56,10 @@ export interface Comparacao {
 export function comparar(serie: PontoMes[], ini: string, fim: string, ix: Indices | null, priceAt: PriceAt): Comparacao | null {
   const r = periodResult(serie, ini, fim);
   if (!r) return null;
+  // Rendimento sobre o dinheiro investido (o mesmo critério do resto do app), mês a mês no período.
+  const i0 = serie.findIndex(p => p.ym >= r.ini), i1 = serie.findIndex(p => p.ym === r.fim);
+  r.rent = janela(serie, i0, i1).pct;
+  r.indice = [r.indice[0], ...serie.slice(i0, i1 + 1).map((p, k) => ({ ym: p.ym, d: p.d, acc: janela(serie, i0, i0 + k).pct }))];
   const d0 = r.indice[0].d, d1 = r.indice.at(-1)!.d;
   let cdi: number | null = null, ipca: Comparacao['ipca'] = null;
   let curvas: Comparacao['curvas'] = { cdi: null, ipca: null, ibov: null };
@@ -90,14 +94,17 @@ export interface Leitura {
 /**
  * Ganho numa janela de meses, em reais e em % do dinheiro que estava aplicado:
  *   ganho = valor no fim - valor no início - compras + vendas + proventos
- *   base  = valor no início + compras feitas na janela
+ *   base  = valor no início + compras - vendas da janela (total investido no período)
  */
 export function janela(serie: PontoMes[], de: number, ate: number): Janela {
   const vIni = de > 0 ? serie[de - 1].v : 0;
   let compras = 0, vendas = 0, prov = 0;
   for (let k = de; k <= ate; k++) { compras += serie[k].compras; vendas += serie[k].vendas; prov += serie[k].prov; }
   const ganho = serie[ate].v - vIni - compras + vendas + prov;
-  const base = vIni + compras;
+  // Base = valor no início + aportes líquidos (compras - vendas). Se as vendas superarem
+  // tudo (posição quase zerada), usa valor no início + compras para não dividir por ~zero.
+  const liquida = vIni + compras - vendas;
+  const base = liquida > Math.max(1e-6, 0.05 * (vIni + compras)) ? liquida : vIni + compras;
   return { ganho, base, pct: base > 1e-6 ? ganho / base : 0, meses: ate - de + 1 };
 }
 

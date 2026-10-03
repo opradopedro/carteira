@@ -71,9 +71,7 @@ export function painelPonto(serie: PontoMes[], x: number, titulo: string, o: Opc
     <div class="sheet-big">${brl.format(L.v)}</div>
     ${o.extra ? o.extra(serie[i]) : ''}
     <div class="sheet-linhas">
-      <div><span>Comprado${L.inicio !== serie[0].ym ? ` desde ${fmtYm(L.inicio)}` : ''}</span><b>${brl.format(L.comprado)}</b></div>
-      ${L.vendido ? `<div><span>Vendido</span><b>− ${brl.format(L.vendido)}</b></div>` : ''}
-      <div><span>Total investido</span><b>${brl.format(L.investido)}</b></div>
+      <div><span>Total investido${L.inicio !== serie[0].ym ? ` (desde ${fmtYm(L.inicio)})` : ''}</span><b>${brl.format(L.investido)}</b></div>
       ${L.proventos ? `<div><span>Proventos recebidos</span><b>${brl.format(L.proventos)}</b></div>` : ''}
       <div><span>Rendimento total</span><b class="${sign(L.resultado)}">${brl.format(L.resultado)} (${fmtPct(L.pctTotal)})</b></div>
     </div>
@@ -82,8 +80,8 @@ export function painelPonto(serie: PontoMes[], x: number, titulo: string, o: Opc
       ${bloco('No mês', L.mes.ganho, L.mes.pct, cdiDe(1))}
     </div>
     <details class="como"><summary>Como é calculado</summary>
-      <p><b>Total investido</b> = compras − vendas da posição atual. Se você já vendeu tudo antes e comprou de novo, conta só a partir da nova compra.</p><p><b>Rendimento total</b> = valor em ${fmtD(L.d)} + proventos − total investido. A % é sobre o total investido.</p>
-      <p><b>${rotulo12} e no mês</b>: ganho = valor no fim − valor no início − compras + vendas + proventos do período, dividido pelo que estava aplicado (valor no início + compras do período).</p>
+      <p><b>Total investido</b> = o que você comprou menos o que vendeu (posição atual; se vendeu tudo e comprou de novo, conta da nova compra).</p><p><b>Rendimento total</b> = valor em ${fmtD(L.d)} + proventos − total investido. A % é sobre o total investido.</p>
+      <p><b>${rotulo12} e no mês</b>: ganho = valor no fim − valor no início − compras + vendas + proventos do período, dividido pelo total investido no período (valor no início + compras − vendas).</p>
       <p>A linha tracejada do gráfico é o custo do que você ainda tem (preço médio × quantidade).</p>
     </details>`;
 }

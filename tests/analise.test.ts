@@ -77,9 +77,9 @@ describe('janela', () => {
   it('ganho e base de um período com venda e provento', () => {
     const s = monthlySeries([L('2025-01-31', 'C', 100, 1000), L('2025-03-15', 'V', 50, 600), L('2025-04-10', 'P', 0, 20)], priceAt, '2025-04-30');
     const j = janela(s, 1, 3); // fev a abr
-    // início 1000; fim 50 × 12,1 = 605; vendas 600; proventos 20 → ganho 225 sobre base 1000
+    // início 1000; fim 50 × 12,1 = 605; vendas 600; proventos 20 → ganho 225 sobre 1000 - 600 investidos
     expect(j.ganho).toBeCloseTo(605 - 1000 + 600 + 20);
-    expect(j.base).toBe(1000);
+    expect(j.base).toBe(400);
   });
 });
 

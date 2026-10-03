@@ -28,7 +28,7 @@ export async function renderAjustes(el: HTMLElement) {
 
   <div class="panel">
     <h2>Filtros de período salvos</h2>
-    <div class="sub">Aparecem como opção rápida em todas as telas com filtro de período (Rentabilidade, Evolução, classes, ativos e proventos).</div>
+    <div class="sub">Aparecem como opção rápida em todas as telas com filtro de período (Rendimento, Evolução, classes, ativos e proventos).</div>
     ${state.filtros.map(f => linhaFiltro(f.id, f.nome, f.ini, f.fim)).join('')}
     <h3 class="sub-h">Novo filtro</h3>
     ${linhaFiltro('novo', '', '', '')}

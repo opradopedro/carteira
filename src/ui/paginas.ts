@@ -17,7 +17,7 @@ import {
 export function tituloPagina(p: Page): string {
   switch (p.k) {
     case 'resumo': return 'Resumo';
-    case 'rent': return 'Rentabilidade';
+    case 'rent': return 'Rendimento';
     case 'evo': return 'Evolução';
     case 'pend': return 'Pendências';
     case 'ajustes': return 'Ajustes';
@@ -84,7 +84,7 @@ function paginaResumo(el: HTMLElement) {
         ${cur ? linha('24 meses', addMonths(cur, -23)) : ''}
         ${cur ? linha('Desde o início', serie[0].ym) : ''}
       </tbody></table></div>
-    <div class="note">Rentabilidade que desconta aportes e inclui proventos. Ibovespa medido pelo ETF ${IBOV_PROXY}.</div>
+    <div class="note">Rendimento = ganho no período (com proventos) ÷ total investido no período (valor no início + compras − vendas). Ibovespa medido pelo ETF ${IBOV_PROXY}.</div>
   </div>
   <div class="panel">
     <h2>Por classe</h2>
@@ -129,7 +129,7 @@ function paginaRent(el: HTMLElement) {
         return `<tr><th>${MES[parseInt(p.ym.slice(5, 7), 10) - 1]}/${p.ym.slice(2, 4)}</th><td class="${sign(p.r)}">${fmtPct(p.r)}</td><td>${pctOu(cdi)}</td><td>${b0 && b1 ? fmtPct(b1 / b0 - 1) : '—'}</td><td>${brl.format(p.v)}</td></tr>`;
       }).join('')}</tbody></table></div>
   </div>`;
-  if (c) graficoRent($('#chRentP'), c, serie, 'Rentabilidade');
+  if (c) graficoRent($('#chRentP'), c, serie, 'Rendimento');
 }
 
 /* ---------- Evolução ---------- */
@@ -140,6 +140,7 @@ function paginaEvo(el: HTMLElement) {
   const [ini, fim] = periodRange(per, first, cur);
   const recorte = serie.filter(p => p.ym >= addMonths(ini, -1) && p.ym <= fim);
   const r = periodResult(serie, ini, fim);
+  const jan = r ? janela(serie, serie.findIndex(p => p.ym >= r.ini), serie.findIndex(p => p.ym === r.fim)) : null;
   el.innerHTML = `
   <div class="panel">
     ${segPeriodo('evo', per, ['12m', 'ano', 'tudo', 'y', 'custom'], first, cur, ini, fim, anosDisponiveis(first, cur))}
@@ -153,7 +154,7 @@ function paginaEvo(el: HTMLElement) {
     <div><span class="label">Aportes líquidos</span><b>${brl.format(r.aportes)}</b></div>
     <div><span class="label">Proventos</span><b>${brl.format(r.prov)}</b></div>
     <div><span class="label">Ganho</span><b class="${sign(r.ganho)}">${brl.format(r.ganho)}</b></div>
-    <div><span class="label">Rentabilidade</span><b class="${sign(r.rent)}">${fmtPct(r.rent)}</b></div>
+    <div><span class="label">Rendimento</span><b class="${sign(jan!.pct)}">${fmtPct(jan!.pct)}</b></div>
   </div></div>` : ''}`;
   graficoPatrimonio($('#chEvoP'), serie, 'Patrimônio', { desde: recorte.length ? recorte[0].ym : undefined });
 }
@@ -181,7 +182,7 @@ function paginaClasse(el: HTMLElement, c: Classe) {
     </div>
   </div>
   ${cur ? `<div class="panel">
-    <h2>Rentabilidade</h2>
+    <h2>Rendimento</h2>
     ${segPeriodo('classe', per, ['12m', 'ano', 'tudo', 'y', 'custom'], s[0].ym, cur, ini, fim, anosDisponiveis(s[0].ym, cur))}
     ${statsComparacao(comp, CLASSES[c])}
     <div class="chart" id="chClsR"></div>${legendaComparacao(CLASSES[c])}
@@ -240,7 +241,7 @@ function paginaAtivo(el: HTMLElement, a: string) {
     ${tudo ? `<div class="destaque">
       <span class="label">Rendimento total${tudo.inicio !== s[0].ym ? ` (posição desde ${fmtYm(tudo.inicio)})` : ''}</span>
       <div class="row between"><b class="${sign(tudo.resultado)}">${brl.format(tudo.resultado)}</b><b class="${sign(tudo.resultado)}">${fmtPct(tudo.pctTotal)}</b></div>
-      <div class="sub">Total investido ${brl.format(tudo.investido)} (compras ${brl.format(tudo.comprado)}${tudo.vendido ? ` − vendas ${brl.format(tudo.vendido)}` : ''})${tudo.proventos ? ` · proventos ${brl.format(tudo.proventos)}` : ''}</div>
+      <div class="sub">Total investido ${brl.format(tudo.investido)}${tudo.proventos ? ` · proventos ${brl.format(tudo.proventos)}` : ''}</div>
     </div>` : ''}
     <div class="stats adapt">
       <div><span class="label">Quantidade</span><b>${fmtQ(p.q)}</b></div>
