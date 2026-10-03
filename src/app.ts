@@ -2,8 +2,8 @@
 import type { Classe, Lancamento, Modelo, Precos } from './core/types';
 import { compute } from './core/calc';
 import { monthlySeries, type PontoMes } from './core/perf';
-import { mergeImport, rowsToLancs, type ResultadoLeitura } from './core/b3';
-import { addMonths, today } from './core/util';
+import { mergeImport, rowsToAReceber, rowsToLancs, type AReceber, type ResultadoLeitura } from './core/b3';
+import { addMonths, today, ymd } from './core/util';
 import * as db from './data/db';
 import type { Config, Indices } from './data/db';
 import { Historico } from './quotes/hist';
@@ -27,6 +27,7 @@ export const state = {
   falhas: [] as string[],
   avisos: [] as string[],
   persist: false,
+  aReceber: null as { em: string; itens: AReceber[] } | null,
 };
 
 export const hist = new Historico();
@@ -44,9 +45,10 @@ export function recompute() {
 }
 
 export async function init() {
-  const [lancs, precos, cfg, indices, cotEm] = await Promise.all([
-    db.getLancs(), db.getKV('precos'), db.getKV('config'), db.getKV('indices'), db.getKV('cotEm'),
+  const [lancs, precos, cfg, indices, cotEm, aReceber] = await Promise.all([
+    db.getLancs(), db.getKV('precos'), db.getKV('config'), db.getKV('indices'), db.getKV('cotEm'), db.getKV('aReceber'),
   ]);
+  state.aReceber = aReceber || null;
   state.lancs = lancs;
   state.precos = precos || {};
   state.cfg = cfg || {};
@@ -66,29 +68,37 @@ export async function loadHist() {
   onChange();
 }
 
-/** Busca cotações e índices. `forcar` ignora a idade dos índices. */
-export async function refresh(forcar = false) {
+/**
+ * Busca cotações e índices, poupando as cotas gratuitas das APIs:
+ *  - 'diario': só vai à internet na primeira abertura do dia (senão usa o que está salvo);
+ *  - 'tudo': botão Atualizar, busca tudo de novo;
+ *  - 'novos': só os ativos que ainda não têm cotação ao vivo de hoje (após importar/lançar).
+ */
+export type ModoAtualizacao = 'diario' | 'tudo' | 'novos';
+
+const ehHoje = (iso?: string) => !!iso && ymd(new Date(iso)) === today();
+
+export async function refresh(modo: ModoAtualizacao = 'diario') {
   if (state.refreshing) return;
+  if (modo === 'diario' && ehHoje(state.cotEm)) {
+    // Já atualizou hoje: só carrega o histórico (do cache, se offline) e o fechamento oficial.
+    await loadHist();
+    if (!ehHoje(state.indices?.em)) await atualizarIndices(false);
+    return;
+  }
   state.refreshing = true; onChange();
   try {
     await hist.load(state.lancs);
     state.histPronto = true;
     recompute();
-    const r = await refreshQuotes(model.open, state.precos, state.cfg, hist);
+    const aoVivo = (a: string) => ['brapi', 'coingecko'].includes(state.precos[a]?.fonte ?? '') && ehHoje(state.precos[a]?.em);
+    const r = await refreshQuotes(model.open, state.precos, state.cfg, hist, modo === 'novos' ? a => !aoVivo(a) : undefined);
     state.precos = r.precos;
     state.falhas = r.falhas;
     state.avisos = r.avisos;
-    state.cotEm = new Date().toISOString();
+    if (modo !== 'novos' || !state.cotEm) state.cotEm = new Date().toISOString();
     await Promise.all([db.setKV('precos', state.precos), db.setKV('cotEm', state.cotEm)]);
-
-    const velho = !state.indices || Date.now() - Date.parse(state.indices.em) > 6 * 3600e3;
-    const desde = desdeIndices();
-    const cobre = state.indices?.cdi?.[0]?.[0] && state.indices.cdi[0][0] <= addDays(desde, 7);
-    if (forcar || velho || !cobre) {
-      const ix = await refreshIndices(desde, cobre ? state.indices ?? undefined : undefined, hist);
-      if (ix) { state.indices = ix; await db.setKV('indices', ix); }
-      else state.falhas.push('Não consegui buscar CDI/IPCA no Banco Central agora.');
-    }
+    await atualizarIndices(modo === 'tudo');
   } catch {
     state.falhas = ['Não foi possível atualizar agora. Mostrando as últimas cotações salvas.'];
   } finally {
@@ -96,6 +106,18 @@ export async function refresh(forcar = false) {
     recompute();
     onChange();
   }
+}
+
+/** CDI/IPCA/Selic: uma vez por dia (ou quando faltar o período dos lançamentos). */
+async function atualizarIndices(forcar: boolean) {
+  if (!navigator.onLine) return;
+  const desde = desdeIndices();
+  const cobre = state.indices?.cdi?.[0]?.[0] && state.indices.cdi[0][0] <= addDays(desde, 7);
+  if (!forcar && cobre && ehHoje(state.indices?.em)) return;
+  const ix = await refreshIndices(desde, cobre ? state.indices ?? undefined : undefined, hist);
+  if (ix) { state.indices = ix; await db.setKV('indices', ix); }
+  else state.falhas = [...state.falhas, 'Não consegui buscar CDI/IPCA no Banco Central agora.'];
+  onChange();
 }
 
 const addDays = (iso: string, n: number) => new Date(Date.parse(iso) + n * 864e5).toISOString().slice(0, 10);
@@ -154,21 +176,32 @@ export async function importB3(files: File[]): Promise<string[]> {
   const todos: ResultadoLeitura = { lancs: [], ignored: 0, kind: '' };
   for (const f of files) {
     let res: ResultadoLeitura = { lancs: [], ignored: 0, kind: '' };
+    let eventos: AReceber[] | null = null;
     try {
       const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
       for (const name of wb.SheetNames) {
-        const r = rowsToLancs(XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '', raw: true }));
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[name], { defval: '', raw: true });
+        const ev = rowsToAReceber(rows);
+        if (ev) { eventos = [...(eventos || []), ...ev]; continue; }
+        const r = rowsToLancs(rows);
         res.lancs.push(...r.lancs); res.ignored += r.ignored; res.kind = res.kind || r.kind;
       }
     } catch {
       msgs.push(`${f.name}: não consegui ler. Confira se é o .xlsx baixado da B3.`);
       continue;
     }
+    if (eventos) {
+      // A planilha de Eventos é uma foto do que está para cair: substitui a anterior.
+      state.aReceber = { em: new Date().toISOString(), itens: eventos };
+      await db.setKV('aReceber', state.aReceber);
+      msgs.push(`${f.name} (Eventos): ${eventos.length} proventos a receber, somando ${eventos.reduce((s, e) => s + e.v, 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}. Veja em Proventos.`);
+      if (!res.kind) continue;
+    }
     if (!res.kind) { msgs.push(`${f.name}: não reconheci. Use o arquivo de Negociação ou de Movimentação da Área do Investidor.`); continue; }
     todos.lancs.push(...res.lancs); todos.ignored += res.ignored;
     msgs.push(`${f.name} (${res.kind}): ${res.lancs.length} linhas úteis` + (res.ignored ? `, ${res.ignored} ignoradas (tipos que o app não usa)` : '') + '.');
   }
-  if (!todos.lancs.length) return msgs;
+  if (!todos.lancs.length) { onChange(); return msgs; }
 
   // Corrige a classe com a lista oficial da B3 (ex.: TAEE11 é unit/ação, BOVA11 é ETF).
   await hist.load([...state.lancs, ...todos.lancs]);
@@ -202,6 +235,6 @@ export async function restoreBackup(lancs: Lancamento[], precosManuais: Precos) 
 
 export async function wipe() {
   await db.clearAll();
-  Object.assign(state, { lancs: [], precos: {}, indices: null, cfg: {}, cotEm: '', falhas: [], avisos: [] });
+  Object.assign(state, { lancs: [], precos: {}, indices: null, cfg: {}, cotEm: '', falhas: [], avisos: [], aReceber: null });
   recompute(); onChange();
 }

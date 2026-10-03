@@ -4,7 +4,8 @@ PWA pessoal para acompanhar investimentos (ações, FIIs, cripto, Tesouro Direto
 
 - **Dados 100% locais**: lançamentos, cotações e configurações ficam no IndexedDB do aparelho. Backup e restauração por arquivo JSON.
 - **Funciona offline**: o app fica em cache (service worker) e mostra as últimas cotações salvas.
-- **Entrada de dados**: planilhas de Negociação e Movimentação da Área do Investidor da B3 (reimportar não duplica) e lançamento manual.
+- **Entrada de dados**: planilhas de Negociação e Movimentação da Área do Investidor da B3 (reimportar não duplica), planilha de Eventos (proventos a receber) e lançamento manual.
+- **Cotações uma vez por dia**: na primeira abertura do dia e no botão Atualizar, para poupar os limites gratuitos das APIs.
 - **Cotações**: só os códigos dos ativos saem do aparelho.
 
 | Fonte | Uso | Observação |

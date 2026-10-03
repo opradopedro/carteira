@@ -109,3 +109,30 @@ export function mergeImport(existing: Lancamento[], incoming: Lancamento[]) {
   }
   return { next: [...existing, ...added], added, dup };
 }
+
+/** Provento já anunciado e ainda não pago (planilha "Eventos" / Proventos a Receber da B3). */
+export interface AReceber { a: string; d: string; tipo: string; v: number }
+
+/**
+ * Lê a planilha de Eventos da B3 (aba "Proventos a Receber"). Não vira lançamento:
+ * quando o provento for pago, ele chega pela planilha de Movimentação.
+ * O número da conta, que vem na planilha, é descartado.
+ */
+export function rowsToAReceber(rows: Linha[]): AReceber[] | null {
+  const out: AReceber[] = [];
+  let reconhecida = false;
+  for (const raw of rows) {
+    const r: Linha = {};
+    for (const k in raw) r[norm(k)] = raw[k];
+    if (!('previsao de pagamento' in r && 'tipo de evento' in r)) continue;
+    reconhecida = true;
+    const a = cleanTicker(String(r['produto'] ?? '').split(' - ')[0]);
+    const d = parseDate(r['previsao de pagamento']);
+    const v = parseNum(r['valor liquido']);
+    if (!a || !d || !(v > 0)) continue; // linha de total e linhas vazias
+    const tipo = String(r['tipo de evento'] ?? '').trim()
+      .replace(/^reembolso - (.*)$/i, (_, x: string) => `Reembolso de ${x.toLowerCase()}`);
+    out.push({ a, d, tipo: tipo.charAt(0).toUpperCase() + tipo.slice(1).toLowerCase(), v });
+  }
+  return reconhecida ? out : null;
+}

@@ -79,7 +79,7 @@ async function coingecko(tickers: string[], key: string | undefined, out: Precos
 }
 
 /** Atualiza as cotações das posições abertas. Mantém preços manuais. */
-export async function refreshQuotes(open: Posicao[], antigos: Precos, cfg: Config, hist: Historico): Promise<ResultadoAtualizacao> {
+export async function refreshQuotes(open: Posicao[], antigos: Precos, cfg: Config, hist: Historico, buscar: (a: string) => boolean = () => true): Promise<ResultadoAtualizacao> {
   const precos: Precos = { ...antigos };
   const falhas: string[] = [], avisos: string[] = [];
   const manual = (a: string) => antigos[a]?.fonte === 'manual';
@@ -94,8 +94,8 @@ export async function refreshQuotes(open: Posicao[], antigos: Precos, cfg: Confi
   }
 
   // 2) Tempo (quase) real.
-  const b3 = open.filter(p => !manual(p.a) && p.c !== 'tesouro' && p.c !== 'cripto' && isB3Ticker(p.a)).map(p => p.a);
-  const cr = open.filter(p => !manual(p.a) && p.c === 'cripto').map(p => p.a);
+  const b3 = open.filter(p => !manual(p.a) && buscar(p.a) && p.c !== 'tesouro' && p.c !== 'cripto' && isB3Ticker(p.a)).map(p => p.a);
+  const cr = open.filter(p => !manual(p.a) && buscar(p.a) && p.c === 'cripto').map(p => p.a);
   const tasks: Promise<void>[] = [];
   if (b3.length) {
     if (cfg.brapiToken) tasks.push(brapi(b3, cfg.brapiToken, precos, falhas));

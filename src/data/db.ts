@@ -1,6 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { Lancamento, Precos } from '../core/types';
 import type { SerieDiaria, SerieMensal } from '../core/perf';
+import type { AReceber } from '../core/b3';
 
 /** Tudo fica no aparelho, no IndexedDB do navegador. */
 export interface Config {
@@ -21,6 +22,7 @@ interface KV {
   config: Config;
   indices: Indices;
   cotEm: string;
+  aReceber: { em: string; itens: AReceber[] };
 }
 
 let dbp: Promise<IDBPDatabase> | null = null;

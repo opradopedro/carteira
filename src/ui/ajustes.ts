@@ -24,7 +24,7 @@ export async function renderAjustes() {
         <button class="btn primary" type="submit">Salvar</button>
         <button class="btn" type="button" id="btnShowKeys">Mostrar</button>
       </div>
-      <div class="note full">Sem token da brapi, ações e FIIs usam o fechamento do último pregão (publicado pela B3 todas as noites). Tesouro Direto atualiza uma vez por dia. O token não entra no backup.</div>
+      <div class="note full">Sem token da brapi, ações e FIIs usam o fechamento do último pregão (publicado pela B3 todas as noites). Para poupar o limite gratuito, as cotações são buscadas só na primeira abertura do dia e quando você toca em Atualizar. Tesouro Direto atualiza uma vez por dia. O token não entra no backup.</div>
     </form>
   </div>
 

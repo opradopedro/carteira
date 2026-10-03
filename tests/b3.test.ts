@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { mergeImport, rowsToLancs } from '../src/core/b3';
+import { mergeImport, rowsToAReceber, rowsToLancs } from '../src/core/b3';
 import { compute } from '../src/core/calc';
 
 // Dados fictícios, no formato das planilhas da Área do Investidor da B3.
@@ -146,5 +146,24 @@ describe('leitura de .xlsx real', () => {
     const r = rowsToLancs(rows);
     expect(r.kind).toBe('Negociação');
     expect(r.lancs).toHaveLength(3);
+  });
+});
+
+describe('rowsToAReceber — planilha de Eventos', () => {
+  const rows = [
+    { 'Produto': 'ABCD4 - EMPRESA FICTICIA S.A.', 'Tipo': 'PN', 'Tipo de Evento': 'Reembolso - JUROS SOBRE CAPITAL PRÓPRIO', 'Previsão de pagamento': '23/11/2026', 'Instituição': 'CORRETORA X', 'Conta': '0000000', 'Quantidade': '-', 'Preço unitário': 0.67, 'Valor líquido': 83.42 },
+    { 'Produto': 'WXYZ3 - OUTRA FICTICIA S.A.', 'Tipo': 'ON', 'Tipo de Evento': 'JUROS SOBRE CAPITAL PRÓPRIO', 'Previsão de pagamento': '10/03/2027', 'Instituição': 'CORRETORA X', 'Conta': '0000000', 'Quantidade': '169', 'Preço unitário': 0.11, 'Valor líquido': 14.95 },
+    { 'Produto': '', 'Tipo': '', 'Tipo de Evento': '', 'Previsão de pagamento': '', 'Instituição': '', 'Conta': '', 'Quantidade': '', 'Preço unitário': 'Total líquido', 'Valor líquido': 98.37 },
+  ];
+  it('lê os proventos anunciados, ignora a linha de total e descarta a conta', () => {
+    const r = rowsToAReceber(rows)!;
+    expect(r).toEqual([
+      { a: 'ABCD4', d: '2026-11-23', tipo: 'Reembolso de juros sobre capital próprio', v: 83.42 },
+      { a: 'WXYZ3', d: '2027-03-10', tipo: 'Juros sobre capital próprio', v: 14.95 },
+    ]);
+  });
+  it('não confunde com outras planilhas', () => {
+    expect(rowsToAReceber(negociacao)).toBeNull();
+    expect(rowsToLancs(rows).kind).toBe('');
   });
 });

@@ -96,7 +96,7 @@ async function submitForm(e: Event) {
   $('#formErr').hidden = true; $('#formPanel').hidden = true;
   await app.addLanc(l);
   toast('Lançamento salvo');
-  if (t !== 'P' && !state.precos[a] && navigator.onLine) app.refresh();
+  if (t !== 'P' && !state.precos[a] && navigator.onLine) app.refresh('novos');
 }
 
 /* ---------- eventos ---------- */
@@ -107,7 +107,7 @@ document.addEventListener('click', async e => {
   if (ds.tab) setTab(ds.tab as Tab);
   else if (t.id === 'btnAdd') openForm();
   else if (t.id === 'btnCancel') $('#formPanel').hidden = true;
-  else if (t.id === 'btnRefresh') { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh(true); }
+  else if (t.id === 'btnRefresh') { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh('tudo'); }
   else if (t.id === 'btnAjustes') setTab(state.tab === 'ajustes' ? 'resumo' : 'ajustes');
   else if (ds.per) {
     state.periodo = ds.per === 'y' ? { tipo: 'y', ano: Number(ds.ano) } : ds.per === 'custom' ? { ...state.periodo, tipo: 'custom' } : { tipo: ds.per as Periodo['tipo'] };
@@ -119,7 +119,7 @@ document.addEventListener('click', async e => {
     if (p > 0) { await app.setPrecoManual(ds.savepx, p); toast('Preço salvo'); }
     else toast('Informe um preço maior que zero.');
   }
-  else if (ds.autopx) { await app.setPrecoManual(ds.autopx, null); toast('Voltando à cotação automática'); if (navigator.onLine) app.refresh(); }
+  else if (ds.autopx) { await app.setPrecoManual(ds.autopx, null); toast('Voltando à cotação automática'); if (navigator.onLine) app.refresh('novos'); }
   else if (ds.del) {
     if (ds.armed) { await app.removeLanc(ds.del); toast('Lançamento excluído'); }
     else {
@@ -151,7 +151,7 @@ document.addEventListener('submit', async e => {
       cgKey: $<HTMLInputElement>('#cCg').value.trim() || undefined,
     });
     toast('Ajustes salvos');
-    if (navigator.onLine && state.lancs.length) app.refresh();
+    if (navigator.onLine && state.lancs.length) app.refresh('novos');
   }
 });
 
@@ -171,7 +171,7 @@ document.addEventListener('change', async e => {
     try {
       const msgs = await app.importB3(files);
       msg.innerHTML = ''; for (const m of msgs) { const d = document.createElement('div'); d.textContent = m; msg.appendChild(d); }
-      if (navigator.onLine) app.refresh();
+      if (navigator.onLine) app.refresh('novos');
     } catch {
       msg.textContent = 'Não foi possível importar. Tente de novo.';
     }
@@ -185,7 +185,7 @@ document.addEventListener('change', async e => {
       if (state.lancs.length && !confirm(`Restaurar o backup de ${b.exportadoEm ? fmtQuando(b.exportadoEm) : 'data desconhecida'} com ${b.lancs.length} lançamentos? A carteira atual (${state.lancs.length} lançamentos) será substituída.`)) { msg.hidden = true; return; }
       await app.restoreBackup(b.lancs, b.precosManuais);
       msg.textContent = `Backup restaurado: ${b.lancs.length} lançamentos.`;
-      if (navigator.onLine) app.refresh(true);
+      if (navigator.onLine) app.refresh('novos');
     } catch (err) {
       msg.textContent = (err as Error).message || 'Não consegui ler o backup.';
     }
@@ -210,7 +210,7 @@ async function exportBackup() {
   downloadJson(b, nome);
 }
 
-window.addEventListener('online', () => { render(); app.refresh(); });
+window.addEventListener('online', () => { render(); if (state.lancs.length) app.refresh('diario'); });
 window.addEventListener('offline', render);
 let rz = 0;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = window.setTimeout(render, 150); });
@@ -225,7 +225,7 @@ async function start() {
   applyTheme();
   render();
   if (state.lancs.length) {
-    if (navigator.onLine) await app.refresh();
+    if (navigator.onLine) await app.refresh('diario');
     else await app.loadHist();
   }
 }

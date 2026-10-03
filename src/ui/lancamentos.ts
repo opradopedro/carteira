@@ -18,7 +18,7 @@ function montar(el: HTMLElement) {
       <label class="btn primary" for="fileB3">Importar planilhas da B3<input type="file" id="fileB3" accept=".xlsx,.xls,.csv" multiple></label>
       <button class="btn" id="btnAdd" type="button">+ Lançar na mão</button>
     </div>
-    <div class="sub">Na Área do Investidor da B3, em <b>Extratos</b>, baixe em Excel o arquivo de <b>Negociação</b> (compras e vendas na bolsa) e o de <b>Movimentação</b> (proventos, Tesouro Direto, desdobros e bonificações). Pode selecionar os dois de uma vez e importar de novo depois: o que já existe não duplica.</div>
+    <div class="sub">Na Área do Investidor da B3, em <b>Extratos</b>, baixe em Excel o arquivo de <b>Negociação</b> (compras e vendas na bolsa) o de <b>Movimentação</b> (proventos, Tesouro Direto, desdobros e bonificações) e, se quiser, o de <b>Eventos</b> (proventos anunciados a receber). Pode selecionar todos de uma vez e importar de novo depois: o que já existe não duplica.</div>
     <div class="sub" id="importMsg" hidden></div>
   </div>
   <div class="panel" id="formPanel" hidden>
