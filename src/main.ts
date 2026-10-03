@@ -57,7 +57,7 @@ function render() {
   for (const t of TABS) $('#tab-' + t).hidden = !!page || t !== nav.tab;
   document.querySelectorAll<HTMLButtonElement>('nav button').forEach(b =>
     !page && b.dataset.tab === nav.tab ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
-  if (page) { renderPagina($('#page'), page); return; }
+  if (page) { renderPagina($('#page'), page); if (page.k === 'lanc' && document.getElementById('eTipo')) syncEdit(); return; }
   if (nav.tab === 'resumo') renderResumo();
   if (nav.tab === 'ativos') renderAtivos();
   if (nav.tab === 'proventos') renderProventos();
@@ -117,12 +117,13 @@ async function sugerirPreco() {
   const tipo = $<HTMLSelectElement>('#fTipo').value, d = $<HTMLInputElement>('#fData').value;
   const a = cleanTicker($<HTMLInputElement>('#fAtivo').value), c = $<HTMLSelectElement>('#fClasse').value as Classe;
   const inp = $<HTMLInputElement>('#fPreco'), nota = $('#fPrecoNota');
-  const pode = !inp.value || inp.dataset.auto === '1';
   if (tipo === 'P' || !a || !d) { atualizarTotal(); return; }
   const id = ++buscaPreco;
   nota.hidden = false; nota.textContent = 'Buscando o preço do dia…';
   const r = await app.hist.precoNoDia(a, c, d, tipo === 'V').catch(() => null);
   if (id !== buscaPreco) return; // o usuário mudou algo enquanto buscava
+  // Decide só agora: se o usuário digitou um preço enquanto buscava, ele é mantido.
+  const pode = !inp.value || inp.dataset.auto === '1';
   if (!r) {
     nota.textContent = 'Não achei o preço desse dia para esse ativo. Informe o preço que você pagou.';
   } else {
@@ -198,7 +199,11 @@ document.addEventListener('click', async e => {
   if (!t) return;
   const ds = t.dataset;
   if (ds.tab) setTab(ds.tab as Tab);
-  else if (t.id === 'btnBack') back();
+  else if (t.id === 'btnBack' || t.id === 'btnBack2') back();
+  else if (ds.delLanc) {
+    if (ds.armed) { await app.removeLanc(ds.delLanc); toast('Lançamento excluído'); back(); }
+    else { ds.armed = '1'; t.textContent = 'Toque de novo para confirmar'; setTimeout(() => { if (t.isConnected) { delete ds.armed; t.textContent = 'Excluir lançamento'; } }, 4000); }
+  }
   else if (t.id === 'btnAdd') openForm();
   else if (t.id === 'btnCancel') $('#formPanel').hidden = true;
   else if (t.id === 'btnRefresh') { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh('tudo'); }
@@ -272,9 +277,39 @@ document.addEventListener('click', async e => {
   }
 });
 
+function syncEdit() {
+  const t = $<HTMLSelectElement>('#eTipo').value;
+  $('#ewQtd').hidden = t === 'P';
+  $('#ewPreco').hidden = t === 'P' || t === 'S';
+  $('#ewValor').hidden = !(t === 'P' || t === 'S');
+  $('#ewValor label').textContent = t === 'S' ? 'Custo acrescentado (R$)' : 'Valor recebido (R$)';
+  const q = parseNum($<HTMLInputElement>('#eQtd').value), p = parseNum($<HTMLInputElement>('#ePreco').value);
+  $('#eTotal').textContent = (t === 'C' || t === 'V') && q > 0 && p > 0 ? `Total da operação: ${brl.format(q * p)}` : '';
+}
+
+async function salvarEdicao(e: Event) {
+  e.preventDefault();
+  const f = e.target as HTMLFormElement;
+  const v = (sel: string) => $<HTMLInputElement>(sel).value;
+  const t = v('#eTipo') as TipoLanc, d = v('#eData'), a = cleanTicker(v('#eAtivo')), c = v('#eClasse') as Classe;
+  const q = parseNum(v('#eQtd')), p = parseNum(v('#ePreco')), val = parseNum(v('#eValor'));
+  const err = !d ? 'Informe a data.' : !a ? 'Informe o ativo.' : d > today() ? 'A data não pode ser no futuro.'
+    : t === 'P' ? (val > 0 ? '' : 'Informe o valor recebido.')
+    : t === 'S' ? (q !== 0 ? '' : 'Informe a quantidade.')
+    : (q > 0 && p > 0 ? '' : 'Informe quantidade e preço maiores que zero.');
+  if (err) { $('#eErr').textContent = err; $('#eErr').hidden = false; return; }
+  const patch = t === 'P' ? { t, d, a, c, q: 0, p: 0, v: val }
+    : t === 'S' ? { t, d, a, c, q, p: 0, v: val }
+    : { t, d, a, c, q, p, v: q * p };
+  await app.updateLanc(f.dataset.id!, patch);
+  toast('Lançamento atualizado');
+  back();
+}
+
 document.addEventListener('submit', async e => {
   const f = e.target as HTMLElement;
   if (f.id === 'form') submitForm(e);
+  else if (f.id === 'formEdit') salvarEdicao(e);
   else if (f.id === 'cfgForm') {
     e.preventDefault();
     await app.saveConfig({
@@ -290,6 +325,12 @@ document.addEventListener('change', async e => {
   const el = e.target as HTMLInputElement;
   if (el.id === 'fTipo') { syncForm(); sugerirPreco(); }
   else if (el.id === 'fData' || el.id === 'fClasse') sugerirPreco();
+  else if (el.id === 'eTipo') syncEdit();
+  else if (el.id === 'ordemLanc') {
+    state.ordemLanc = el.value as typeof state.ordemLanc;
+    try { localStorage.setItem('ordemLanc', state.ordemLanc); } catch { /* ignora */ }
+    renderLancs();
+  }
   else if (el.id === 'cls' && el.dataset.cls) { await app.setClasse(el.dataset.cls, el.value as Classe); toast('Classe alterada'); }
   else if (el.id === 'cTema') { await app.saveConfig({ tema: el.value as 'auto' | 'claro' | 'escuro' }); applyTheme(); }
   else if (el.dataset.perIni || el.dataset.perFim) {
@@ -332,6 +373,7 @@ document.addEventListener('input', e => {
   else if (el.id === 'fAtivo') mostrarSugestoes();
   else if (el.id === 'fPreco') { el.dataset.auto = ''; atualizarTotal(); }
   else if (el.id === 'fQtd') atualizarTotal();
+  else if (el.id === 'eQtd' || el.id === 'ePreco') syncEdit();
 });
 document.addEventListener('focusout', e => {
   if ((e.target as HTMLElement).id !== 'fAtivo') return;
@@ -377,6 +419,7 @@ window.addEventListener('resize', () => {
 async function start() {
   app.setOnChange(render);
   setRenderView(render);
+  try { const o = localStorage.getItem('ordemLanc'); if (o) state.ordemLanc = o as typeof state.ordemLanc; } catch { /* ignora */ }
   initNav(location.hash.slice(1));
   renderLancs(); syncForm();
   render();

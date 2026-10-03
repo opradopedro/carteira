@@ -7,7 +7,7 @@ import { hideSheet } from './sheet';
 export type Tab = 'resumo' | 'ativos' | 'proventos' | 'lancamentos';
 export type Page =
   | { k: 'resumo' } | { k: 'rent' } | { k: 'evo' } | { k: 'pend' } | { k: 'ajustes' }
-  | { k: 'classe'; c: Classe } | { k: 'ativo'; a: string } | { k: 'prov'; a?: string; c?: Classe };
+  | { k: 'classe'; c: Classe } | { k: 'ativo'; a: string } | { k: 'prov'; a?: string; c?: Classe } | { k: 'lanc'; id: string };
 
 export const TABS: Tab[] = ['resumo', 'ativos', 'proventos', 'lancamentos'];
 
@@ -31,6 +31,7 @@ export function parsePage(s: string): Page | null {
     case 'resumo': case 'rent': case 'evo': case 'pend': case 'ajustes': return { k };
     case 'classe': return { k, c: a as Classe };
     case 'ativo': return { k, a: s.slice(6) };
+    case 'lanc': return { k, id: s.slice(5) };
     case 'prov': return a === 'a' ? { k, a: s.slice(7) } : a === 'c' ? { k, c: b as Classe } : { k };
   }
   return null;

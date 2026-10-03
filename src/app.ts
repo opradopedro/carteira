@@ -24,6 +24,8 @@ export const state = {
   per: { rent: { tipo: '12m' }, evo: { tipo: 'tudo' }, prov: { tipo: '12m' }, classe: { tipo: '12m' }, ativo: { tipo: 'tudo' } } as Record<'rent' | 'evo' | 'prov' | 'classe' | 'ativo', Periodo>,
   /** Ativo cujos ajustes estão destravados para edição. */
   editando: null as string | null,
+  /** Ordem da lista de lançamentos. */
+  ordemLanc: 'recentes' as 'recentes' | 'antigos' | 'ativo' | 'valor',
   filtros: [] as FiltroSalvo[],
   refreshing: false,
   histPronto: false,
@@ -269,13 +271,15 @@ export async function marcarBackup() {
 }
 
 /** Corrige um lançamento sem perder a identidade da importação (reimportar não duplica). */
-export async function updateLanc(id: string, patch: Partial<Pick<Lancamento, 'v' | 'p' | 'q' | 'd'>>) {
+export async function updateLanc(id: string, patch: Partial<Omit<Lancamento, 'id' | 'o' | 'k0'>>) {
   const atual = state.lancs.find(l => l.id === id);
   if (!atual) return;
   const novo: Lancamento = { ...atual, ...patch, k0: atual.k0 ?? keyOf(atual) };
+  if (novo.o === 'manual') delete novo.k0; // só lançamentos importados precisam lembrar a chave original
   state.lancs = state.lancs.map(l => (l.id === id ? novo : l));
   await db.putLancs([novo]);
   recompute(); onChange();
+  if (patch.a && patch.a !== atual.a) hist.load(state.lancs).then(() => { recompute(); onChange(); });
 }
 
 export async function reverIgnoradas() {

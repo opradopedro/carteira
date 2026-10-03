@@ -9,6 +9,7 @@ import { $, MES, arrow, brl, esc, fmtD, fmtNum, fmtPct, fmtQ, fmtQuando, fmtYm, 
 import type { Page } from './nav';
 import { renderAjustes } from './ajustes';
 import { renderPendencias } from './pendencias';
+import { itemLanc } from './lancamentos';
 import { chipsIndices, comparacao12m, porClasse } from './resumo';
 import {
   anosDisponiveis, graficoPatrimonio, graficoRent, legendaComparacao, pctOu, segPeriodo, statsComparacao,
@@ -24,6 +25,7 @@ export function tituloPagina(p: Page): string {
     case 'classe': return CLASSES[p.c];
     case 'ativo': return p.a;
     case 'prov': return p.a ? `Proventos · ${p.a}` : p.c ? `Proventos · ${CLASSES[p.c]}` : 'Proventos';
+    case 'lanc': return 'Editar lançamento';
   }
 }
 
@@ -38,6 +40,7 @@ export function renderPagina(el: HTMLElement, p: Page) {
     case 'prov': return paginaProv(el, p.a, p.c);
     case 'pend': return renderPendencias(el);
     case 'ajustes': return void renderAjustes(el);
+    case 'lanc': return paginaLanc(el, p.id);
   }
 }
 
@@ -282,10 +285,7 @@ function paginaAtivo(el: HTMLElement, a: string) {
       <button type="button" class="btn small" data-editar="">Concluir</button></div>` : '<div class="note">Toque em Editar para mudar a classe ou informar um preço.</div>'}
   </div>
   ${p.prov > 0 ? `<div class="row"><button type="button" class="btn" data-page="prov:a:${esc(a)}">Ver proventos de ${esc(a)} ›</button></div>` : ''}
-  <div class="panel"><h2>Lançamentos</h2><div class="list">${lancs.slice(0, 60).map(l => `<div class="item">
-    <div class="name">${l.t === 'C' ? 'Compra' : l.t === 'V' ? 'Venda' : l.t === 'P' ? esc(l.n || 'Provento') : esc(l.n || 'Ajuste')}</div>
-    <div class="val">${l.t === 'S' ? (l.q > 0 ? '+' : '') + fmtQ(l.q) : brl.format(l.v)}</div>
-    <div class="meta">${fmtD(l.d)}${l.t === 'C' || l.t === 'V' ? ' · ' + fmtQ(l.q) + ' × ' + brl.format(l.p) : ''}</div><div class="meta r"></div></div>`).join('')}
+  <div class="panel"><h2>Lançamentos</h2><div class="note">Toque num lançamento para corrigir ou excluir.</div><div class="list">${lancs.slice(0, 60).map(l => itemLanc(l, false)).join('')}
     ${lancs.length > 60 ? `<div class="empty">Mostrando os 60 mais recentes de ${lancs.length}.</div>` : ''}</div></div>`;
   if (cur) graficoPatrimonio($('#chAtivo'), s, a, {
     desde: per.tipo === 'tudo' ? undefined : addMonths(ini, -1),
@@ -323,3 +323,38 @@ function paginaProv(el: HTMLElement, a?: string, c?: Classe) {
 }
 
 export { listaPendencias, fmtYm };
+
+/* ---------- Editar lançamento ---------- */
+function paginaLanc(el: HTMLElement, id: string) {
+  const l = state.lancs.find(x => x.id === id);
+  if (!l) { el.innerHTML = '<div class="panel"><div class="empty">Lançamento não encontrado (talvez já tenha sido excluído).</div></div>'; return; }
+  const num = (x: number) => (x ? String(x).replace('.', ',') : '');
+  const ehP = l.t === 'P', ehS = l.t === 'S';
+  el.innerHTML = `
+  <div class="panel">
+    <div class="sub">${l.o === 'b3' ? 'Lançamento importado da B3. Se você corrigir aqui e importar a planilha de novo, a correção é mantida e nada duplica.' : 'Lançamento feito à mão.'}</div>
+    <form id="formEdit" data-id="${esc(l.id)}" autocomplete="off">
+      <div class="field"><label for="eTipo">Tipo</label>
+        <select id="eTipo">${ehS ? '<option value="S" selected>Ajuste (desdobro, bonificação…)</option>' : ''}
+          <option value="C" ${l.t === 'C' ? 'selected' : ''}>Compra</option><option value="V" ${l.t === 'V' ? 'selected' : ''}>Venda</option><option value="P" ${ehP ? 'selected' : ''}>Provento recebido</option></select></div>
+      <div class="field"><label for="eData">Data</label><input type="date" id="eData" value="${l.d}" max="${today()}" required></div>
+      <div class="field"><label for="eAtivo">Ativo</label><input id="eAtivo" value="${esc(l.a)}" autocapitalize="characters" spellcheck="false" required></div>
+      <div class="field"><label for="eClasse">Classe</label>
+        <select id="eClasse">${Object.entries(CLASSES).map(([k, v]) => `<option value="${k}" ${k === l.c ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="field" id="ewQtd" ${ehP ? 'hidden' : ''}><label for="eQtd">Quantidade</label><input id="eQtd" inputmode="decimal" value="${num(l.q)}"></div>
+      <div class="field" id="ewPreco" ${ehP || ehS ? 'hidden' : ''}><label for="ePreco">Preço unitário (R$)</label><input id="ePreco" inputmode="decimal" value="${num(l.p)}"></div>
+      <div class="field full" id="ewValor" ${ehP || ehS ? '' : 'hidden'}><label for="eValor">${ehS ? 'Custo acrescentado (R$)' : 'Valor recebido (R$)'}</label><input id="eValor" inputmode="decimal" value="${num(l.v)}"></div>
+      <div class="note full" id="eTotal"></div>
+      <div class="row full">
+        <button class="btn primary" type="submit">Salvar alterações</button>
+        <button class="btn" type="button" id="btnBack2">Cancelar</button>
+      </div>
+      <div class="err full" id="eErr" hidden></div>
+    </form>
+  </div>
+  <div class="panel">
+    <h2>Excluir</h2>
+    <div class="sub">Remove este lançamento da carteira. Se ele veio da B3 e você importar a planilha de novo, ele volta.</div>
+    <div class="row"><button type="button" class="btn danger" data-del-lanc="${esc(l.id)}">Excluir lançamento</button></div>
+  </div>`;
+}
