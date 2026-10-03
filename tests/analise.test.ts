@@ -45,6 +45,28 @@ describe('lerPonto (sobre o dinheiro aplicado)', () => {
     const twr = s.reduce((a, p) => a * (1 + p.r), 1) - 1; // a rentabilidade "por cota" seria −40%
     expect(twr).toBeCloseTo(-0.4);
   });
+  it('vendeu tudo e comprou de novo: conta só a posição atual', () => {
+    const p3: Record<string, number> = { '2025-01': 10, '2025-02': 12, '2025-03': 20, '2025-04': 21, '2025-05': 22 };
+    const pa: PriceAt = (_a, _c, ym) => p3[ym] ?? null;
+    const s = monthlySeries([
+      L('2025-01-31', 'C', 10, 100),      // compra antiga
+      L('2025-02-15', 'V', 10, 120),      // vende tudo
+      L('2025-04-30', 'C', 100, 2100),    // compra de novo
+    ], pa, '2025-05-31');
+    const r = lerPonto(s, s.length - 1);
+    expect(r.inicio).toBe('2025-04');
+    expect(r.comprado).toBe(2100);
+    expect(r.investido).toBe(2100);
+    expect(r.resultado).toBeCloseTo(2200 - 2100);
+    expect(r.pctTotal).toBeCloseTo(100 / 2100);
+  });
+  it('total investido = compras - vendas da posição atual', () => {
+    const s = monthlySeries([L('2025-01-31', 'C', 100, 1000), L('2025-03-15', 'V', 50, 600)], priceAt, '2025-04-30');
+    const r = lerPonto(s, 3);
+    expect(r.investido).toBe(400);
+    expect(r.resultado).toBeCloseTo(50 * 12.1 + 600 - 1000);
+    expect(r.pctTotal).toBeCloseTo((50 * 12.1 + 600 - 1000) / 400);
+  });
   it('acha o ponto mais próximo de uma data', () => {
     const s = monthlySeries([L('2025-01-31', 'C', 100, 1000)], priceAt, '2025-04-30');
     expect(pontoMaisProximo(s, Date.UTC(2025, 2, 25))).toBe(2);

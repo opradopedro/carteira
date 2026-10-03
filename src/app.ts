@@ -4,13 +4,13 @@ import { compute } from './core/calc';
 import { pendencias as calcPendencias, type Pendencia } from './core/pendencias';
 import { monthlySeries, type PontoMes } from './core/perf';
 import { keyOf, mergeImport, rowsToAReceber, rowsToLancs, type AReceber, type ResultadoLeitura } from './core/b3';
-import { today, ymd } from './core/util';
+import { newId, today, ymd } from './core/util';
 import * as db from './data/db';
 import type { Config, Indices } from './data/db';
 import { Historico } from './quotes/hist';
 import { refreshIndices, refreshQuotes } from './quotes/live';
 
-import type { Periodo } from './core/analise';
+import type { FiltroSalvo, Periodo } from './core/analise';
 export type { Periodo };
 
 export const state = {
@@ -24,6 +24,7 @@ export const state = {
   per: { rent: { tipo: '12m' }, evo: { tipo: 'tudo' }, prov: { tipo: '12m' }, classe: { tipo: '12m' }, ativo: { tipo: 'tudo' } } as Record<'rent' | 'evo' | 'prov' | 'classe' | 'ativo', Periodo>,
   /** Ativo cujos ajustes estão destravados para edição. */
   editando: null as string | null,
+  filtros: [] as FiltroSalvo[],
   refreshing: false,
   histPronto: false,
   falhas: [] as string[],
@@ -68,6 +69,7 @@ export async function init() {
   ]);
   state.pendIgnoradas = (await db.getKV('pendIgnoradas')) || [];
   state.ultimoBackup = (await db.getKV('ultimoBackup')) || '';
+  state.filtros = (await db.getKV('filtros')) || [];
   state.aReceber = aReceber || null;
   state.lancs = lancs;
   state.precos = precos || {};
@@ -279,5 +281,21 @@ export async function updateLanc(id: string, patch: Partial<Pick<Lancamento, 'v'
 export async function reverIgnoradas() {
   state.pendIgnoradas = [];
   await db.setKV('pendIgnoradas', []);
+  onChange();
+}
+
+/** Cria ou altera um filtro de período salvo. */
+export async function salvarFiltro(f: Omit<FiltroSalvo, 'id'> & { id?: string }) {
+  const ini = f.ini <= f.fim ? f.ini : f.fim, fim = f.ini <= f.fim ? f.fim : f.ini;
+  const novo: FiltroSalvo = { id: f.id || newId(), nome: f.nome.trim() || `${ini} a ${fim}`, ini, fim };
+  state.filtros = f.id ? state.filtros.map(x => (x.id === f.id ? novo : x)) : [...state.filtros, novo];
+  await db.setKV('filtros', state.filtros);
+  onChange();
+  return novo;
+}
+
+export async function excluirFiltro(id: string) {
+  state.filtros = state.filtros.filter(x => x.id !== id);
+  await db.setKV('filtros', state.filtros);
   onChange();
 }

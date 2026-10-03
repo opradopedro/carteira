@@ -128,6 +128,32 @@ document.addEventListener('click', async e => {
   else if (t.id === 'btnCancel') $('#formPanel').hidden = true;
   else if (t.id === 'btnRefresh') { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh('tudo'); }
   else if (ds.editar !== undefined) { state.editando = ds.editar || null; rerenderPagina(); }
+  else if (ds.salvarFiltro) {
+    const k = ds.salvarFiltro as keyof typeof state.per;
+    const v = (sel: string) => document.querySelector<HTMLInputElement>(sel)?.value || '';
+    const ini = v(`[data-per-ini="${k}"]`), fim = v(`[data-per-fim="${k}"]`);
+    if (!ini || !fim) { toast('Escolha o mês inicial e o final.'); return; }
+    const nome = prompt('Nome do filtro (aparece como opção em todas as telas):', `${ini.split('-').reverse().join('/')} a ${fim.split('-').reverse().join('/')}`);
+    if (nome == null) return;
+    const f = await app.salvarFiltro({ nome, ini, fim });
+    state.per[k] = { tipo: 'custom', ini: f.ini, fim: f.fim, salvo: f.id };
+    toast('Filtro salvo'); rerenderPagina();
+  }
+  else if (ds.per === 'salvo' && ds.perChave) {
+    const f = state.filtros.find(x => x.id === ds.salvo);
+    if (f) { state.per[ds.perChave as keyof typeof state.per] = { tipo: 'custom', ini: f.ini, fim: f.fim, salvo: f.id }; rerenderPagina(); }
+  }
+  else if (ds.filtroSalvar) {
+    const id = ds.filtroSalvar === 'novo' ? undefined : ds.filtroSalvar;
+    const v = (campo: string) => document.querySelector<HTMLInputElement>(`[data-filtro-campo="${campo}"][data-filtro-id="${ds.filtroSalvar}"]`)?.value || '';
+    if (!v('ini') || !v('fim')) { toast('Escolha o mês inicial e o final.'); return; }
+    await app.salvarFiltro({ id, nome: v('nome'), ini: v('ini'), fim: v('fim') });
+    toast(id ? 'Filtro alterado' : 'Filtro criado'); rerenderPagina();
+  }
+  else if (ds.filtroExcluir) {
+    if (ds.armed) { await app.excluirFiltro(ds.filtroExcluir); toast('Filtro excluído'); rerenderPagina(); }
+    else { ds.armed = '1'; t.textContent = 'Confirmar'; setTimeout(() => { if (t.isConnected) { delete ds.armed; t.textContent = 'Excluir'; } }, 3500); }
+  }
   else if (ds.per && ds.perChave) {
     const k = ds.perChave as keyof typeof state.per;
     state.per[k] = ds.per === 'y' ? { tipo: 'y', ano: Number(ds.ano) } : ds.per === 'custom' ? { ...state.per[k], tipo: 'custom' } : { tipo: ds.per as Periodo['tipo'] };

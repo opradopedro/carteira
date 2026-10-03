@@ -7,7 +7,10 @@ import {
 } from './perf';
 import { addMonths, monthEnd } from './util';
 
-export interface Periodo { tipo: '12m' | 'ano' | 'anoPassado' | 'tudo' | 'y' | 'custom'; ano?: number; ini?: string; fim?: string }
+export interface Periodo { tipo: '12m' | 'ano' | 'anoPassado' | 'tudo' | 'y' | 'custom'; ano?: number; ini?: string; fim?: string; salvo?: string }
+
+/** Filtro de período personalizado salvo pelo usuário (vale para todas as telas). */
+export interface FiltroSalvo { id: string; nome: string; ini: string; fim: string }
 
 /** Intervalo de meses [ini, fim] de um período, limitado a [first, cur]. */
 export function periodRange(p: Periodo, first: string, cur: string): [string, string] {
@@ -73,11 +76,13 @@ export interface Janela { ganho: number; base: number; pct: number; meses: numbe
 
 export interface Leitura {
   ym: string; d: string; v: number; custo: number;
-  comprado: number;   // tudo o que foi comprado até a data
-  vendido: number;    // tudo o que foi recebido em vendas até a data
-  proventos: number;  // proventos recebidos até a data
+  inicio: string;     // mês em que começou a posição atual (depois de zerada, recomeça)
+  comprado: number;   // compras desde o início da posição atual
+  vendido: number;    // vendas desde o início da posição atual
+  proventos: number;  // proventos desde o início da posição atual
+  investido: number;  // total investido = comprado - vendido
   resultado: number;  // valor + vendas + proventos - compras
-  pctTotal: number;   // resultado / total comprado
+  pctTotal: number;   // rendimento total = resultado / total investido
   doze: Janela;       // últimos 12 meses até a data
   mes: Janela;        // só o mês da data
 }
@@ -96,18 +101,31 @@ export function janela(serie: PontoMes[], de: number, ate: number): Janela {
   return { ganho, base, pct: base > 1e-6 ? ganho / base : 0, meses: ate - de + 1 };
 }
 
-/** O que mostrar ao tocar num ponto do gráfico, calculado sobre o dinheiro aplicado. */
+/** Primeiro mês da posição que existe no ponto i (se a posição foi zerada antes, começa depois disso). */
+export function inicioPosicao(serie: PontoMes[], i: number): number {
+  let k = i;
+  while (k > 0 && !(Math.abs(serie[k - 1].v) < 0.005 && Math.abs(serie[k - 1].custo) < 0.005)) k--;
+  return k;
+}
+
+/**
+ * O que mostrar ao tocar num ponto do gráfico, calculado sobre o dinheiro aplicado.
+ * Se a posição foi vendida inteira e comprada de novo, conta só a partir da recompra.
+ */
 export function lerPonto(serie: PontoMes[], i: number): Leitura {
   const p = serie[i];
+  const k0 = inicioPosicao(serie, i);
   let comprado = 0, vendido = 0, proventos = 0;
-  for (let k = 0; k <= i; k++) { comprado += serie[k].compras; vendido += serie[k].vendas; proventos += serie[k].prov; }
+  for (let k = k0; k <= i; k++) { comprado += serie[k].compras; vendido += serie[k].vendas; proventos += serie[k].prov; }
   const resultado = p.v + vendido + proventos - comprado;
+  const investido = comprado - vendido;
+  const base = investido > 1e-6 ? investido : comprado;
   const lim = addMonths(p.ym, -12);
   let de12 = i;
-  while (de12 > 0 && serie[de12 - 1].ym > lim) de12--;
+  while (de12 > k0 && serie[de12 - 1].ym > lim) de12--;
   return {
-    ym: p.ym, d: p.d, v: p.v, custo: p.custo, comprado, vendido, proventos, resultado,
-    pctTotal: comprado > 1e-6 ? resultado / comprado : 0,
+    ym: p.ym, d: p.d, v: p.v, custo: p.custo, inicio: serie[k0].ym, comprado, vendido, proventos, investido, resultado,
+    pctTotal: base > 1e-6 ? resultado / base : 0,
     doze: janela(serie, de12, i), mes: janela(serie, i, i),
   };
 }

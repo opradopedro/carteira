@@ -238,9 +238,9 @@ function paginaAtivo(el: HTMLElement, a: string) {
     <div class="big">${brl.format(p.value)}</div>
     ${p.q > 0 ? `<div class="delta ${sign(p.res)}">${arrow(p.res)} ${brl.format(Math.abs(p.res))} (${fmtPct(pct)}) sobre o custo atual</div>` : `<div class="sub">${p.q < 0 ? 'Posição vendida (veja Pendências)' : 'Posição encerrada'}</div>`}
     ${tudo ? `<div class="destaque">
-      <span class="label">Resultado total desde a primeira compra</span>
+      <span class="label">Rendimento total${tudo.inicio !== s[0].ym ? ` (posição desde ${fmtYm(tudo.inicio)})` : ''}</span>
       <div class="row between"><b class="${sign(tudo.resultado)}">${brl.format(tudo.resultado)}</b><b class="${sign(tudo.resultado)}">${fmtPct(tudo.pctTotal)}</b></div>
-      <div class="sub">Total comprado ${brl.format(tudo.comprado)}${tudo.vendido ? ` · vendas ${brl.format(tudo.vendido)}` : ''}${tudo.proventos ? ` · proventos ${brl.format(tudo.proventos)}` : ''}</div>
+      <div class="sub">Total investido ${brl.format(tudo.investido)} (compras ${brl.format(tudo.comprado)}${tudo.vendido ? ` − vendas ${brl.format(tudo.vendido)}` : ''})${tudo.proventos ? ` · proventos ${brl.format(tudo.proventos)}` : ''}</div>
     </div>` : ''}
     <div class="stats adapt">
       <div><span class="label">Quantidade</span><b>${fmtQ(p.q)}</b></div>
@@ -263,7 +263,7 @@ function paginaAtivo(el: HTMLElement, a: string) {
     <div class="chart" id="chAtivo"></div>
     <div class="legend"><span><i style="background:var(--accent)"></i>Valor da posição</span><span><i style="background:var(--muted)"></i>Investido (custo do que você tem)</span></div>
     <details class="como"><summary>Como é calculado</summary>
-      <p><b>Resultado total</b> = valor de hoje + o que recebeu em vendas + proventos − tudo o que comprou. A % é sobre o total comprado.</p>
+      <p><b>Total investido</b> = compras − vendas da posição atual. Se você vendeu tudo e comprou de novo, conta só a partir da nova compra.</p><p><b>Rendimento total</b> = valor de hoje + proventos − total investido. A % é sobre o total investido.</p>
       <p><b>Ganho no período</b> = valor no fim − valor no início − compras + vendas + proventos do período. A % é sobre o que estava aplicado: valor no início + compras do período.</p>
       <p>Toque ou arraste no gráfico para ver esses números em cada mês. Ao rolar a página por cima do gráfico, nada abre.</p>
     </details>
@@ -308,7 +308,7 @@ function paginaProv(el: HTMLElement, a?: string, c?: Classe) {
   const custo = a ? model.list.find(p => p.a === a)?.cost ?? 0 : c ? model.open.filter(p => p.c === c).reduce((s, p) => s + p.cost, 0) : model.tot.cost;
   el.innerHTML = `
   <div class="panel">
-    ${segPeriodo('prov', per, ['12m', 'ano', 'anoPassado', 'custom'], first, cur, ini, fim)}
+    ${segPeriodo('prov', per, ['12m', 'ano', 'anoPassado', 'tudo', 'custom'], first, cur, ini, fim)}
     <div class="big">${brl.format(r.total)}</div>
     <div class="sub">Média de ${brl.format(r.media)} por mês · ${r.itens.length} pagamento${r.itens.length === 1 ? '' : 's'}${custo && per.tipo === '12m' ? ` · rende ${fmtNum(r.total / custo * 100)}% do investido` : ''}</div>
     <div class="chart" id="chProvP"></div>

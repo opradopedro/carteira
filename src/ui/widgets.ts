@@ -20,11 +20,13 @@ export function segPeriodo(chave: string, p: Periodo, presets: Preset[], first: 
     `<button type="button" data-per-chave="${chave}" ${attrs} aria-pressed="${on}">${label}</button>`;
   const bs = presets.filter(x => x !== 'custom' && x !== 'y').map(x => btn(NOMES[x], `data-per="${x}"`, p.tipo === x));
   for (const y of anos) bs.push(btn(String(y), `data-per="y" data-ano="${y}"`, p.tipo === 'y' && p.ano === y));
-  if (presets.includes('custom')) bs.push(btn('Personalizado', 'data-per="custom"', p.tipo === 'custom'));
+  for (const f of state.filtros) bs.push(btn(esc(f.nome), `data-per="salvo" data-salvo="${esc(f.id)}"`, p.salvo === f.id));
+  if (presets.includes('custom')) bs.push(btn('Personalizado', 'data-per="custom"', p.tipo === 'custom' && !p.salvo));
   return `<div class="seg" role="group" aria-label="Período">${bs.join('')}</div>
     ${p.tipo === 'custom' ? `<div class="form">
       <div class="field"><label>De</label><input type="month" data-per-ini="${chave}" min="${first}" max="${cur}" value="${ini}"></div>
-      <div class="field"><label>Até</label><input type="month" data-per-fim="${chave}" min="${first}" max="${cur}" value="${fim}"></div></div>` : ''}
+      <div class="field"><label>Até</label><input type="month" data-per-fim="${chave}" min="${first}" max="${cur}" value="${fim}"></div></div>
+      ${p.salvo ? '' : `<div class="row"><button type="button" class="btn small" data-salvar-filtro="${chave}">Salvar este filtro</button></div>`}` : ''}
     <div class="sub">${fmtYm(ini)} a ${fim === cur ? 'hoje' : fmtYm(fim)}</div>`;
 }
 
@@ -69,17 +71,18 @@ export function painelPonto(serie: PontoMes[], x: number, titulo: string, o: Opc
     <div class="sheet-big">${brl.format(L.v)}</div>
     ${o.extra ? o.extra(serie[i]) : ''}
     <div class="sheet-linhas">
-      <div><span>Total comprado</span><b>${brl.format(L.comprado)}</b></div>
-      ${L.vendido ? `<div><span>Recebido em vendas</span><b>${brl.format(L.vendido)}</b></div>` : ''}
+      <div><span>Comprado${L.inicio !== serie[0].ym ? ` desde ${fmtYm(L.inicio)}` : ''}</span><b>${brl.format(L.comprado)}</b></div>
+      ${L.vendido ? `<div><span>Vendido</span><b>− ${brl.format(L.vendido)}</b></div>` : ''}
+      <div><span>Total investido</span><b>${brl.format(L.investido)}</b></div>
       ${L.proventos ? `<div><span>Proventos recebidos</span><b>${brl.format(L.proventos)}</b></div>` : ''}
-      <div><span>Resultado total</span><b class="${sign(L.resultado)}">${brl.format(L.resultado)} (${fmtPct(L.pctTotal)})</b></div>
+      <div><span>Rendimento total</span><b class="${sign(L.resultado)}">${brl.format(L.resultado)} (${fmtPct(L.pctTotal)})</b></div>
     </div>
     <div class="stats">
       ${bloco(rotulo12, L.doze.ganho, L.doze.pct, cdiDe(L.doze.meses))}
       ${bloco('No mês', L.mes.ganho, L.mes.pct, cdiDe(1))}
     </div>
     <details class="como"><summary>Como é calculado</summary>
-      <p><b>Resultado total</b> = valor em ${fmtD(L.d)} + o que recebeu em vendas + proventos − tudo o que comprou. A % é esse resultado dividido pelo total comprado.</p>
+      <p><b>Total investido</b> = compras − vendas da posição atual. Se você já vendeu tudo antes e comprou de novo, conta só a partir da nova compra.</p><p><b>Rendimento total</b> = valor em ${fmtD(L.d)} + proventos − total investido. A % é sobre o total investido.</p>
       <p><b>${rotulo12} e no mês</b>: ganho = valor no fim − valor no início − compras + vendas + proventos do período, dividido pelo que estava aplicado (valor no início + compras do período).</p>
       <p>A linha tracejada do gráfico é o custo do que você ainda tem (preço médio × quantidade).</p>
     </details>`;

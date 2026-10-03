@@ -27,6 +27,14 @@ export async function renderAjustes(el: HTMLElement) {
   </div>
 
   <div class="panel">
+    <h2>Filtros de período salvos</h2>
+    <div class="sub">Aparecem como opção rápida em todas as telas com filtro de período (Rentabilidade, Evolução, classes, ativos e proventos).</div>
+    ${state.filtros.map(f => linhaFiltro(f.id, f.nome, f.ini, f.fim)).join('')}
+    <h3 class="sub-h">Novo filtro</h3>
+    ${linhaFiltro('novo', '', '', '')}
+  </div>
+
+  <div class="panel">
     <h2>Aparência</h2>
     <div class="field"><label for="cTema">Tema</label>
       <select id="cTema">
@@ -52,4 +60,16 @@ export async function renderAjustes(el: HTMLElement) {
     ${m ? `<div class="note">Versão ${__VERSAO__} · histórico público gerado em ${fmtQuando(m.geradoEm)}${m.b3?.ultimo ? ` · B3 até ${fmtD(m.b3.ultimo)}` : ''}${m.tesouroUltimo ? ` · Tesouro até ${fmtD(m.tesouroUltimo)}` : ''}.</div>` : ''}
     <div class="row"><button class="btn danger" type="button" id="btnWipe">Apagar todos os dados</button></div>
   </div>`;
+}
+
+function linhaFiltro(id: string, nome: string, ini: string, fim: string) {
+  const a = (campo: string) => `data-filtro-campo="${campo}" data-filtro-id="${esc(id)}"`;
+  return `<div class="form filtro-linha">
+    <div class="field full"><label>Nome</label><input ${a('nome')} value="${esc(nome)}" placeholder="ex.: Desde que mudei de corretora"></div>
+    <div class="field"><label>De</label><input type="month" ${a('ini')} value="${esc(ini)}"></div>
+    <div class="field"><label>Até</label><input type="month" ${a('fim')} value="${esc(fim)}"></div>
+    <div class="row full">
+      <button type="button" class="btn small primary" data-filtro-salvar="${esc(id)}">${id === 'novo' ? 'Criar filtro' : 'Salvar'}</button>
+      ${id === 'novo' ? '' : `<button type="button" class="btn small danger" data-filtro-excluir="${esc(id)}">Excluir</button>`}
+    </div></div>`;
 }
