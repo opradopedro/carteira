@@ -13,19 +13,22 @@
 <body>
   <div class="wrap">
     <header class="top">
+      <button class="btn icon back" id="btnBack" type="button" aria-label="Voltar" title="Voltar" hidden>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></svg>
+      </button>
       <div class="top-title">
-        <h1>Minha Carteira</h1>
+        <h1 id="title">Minha Carteira</h1>
         <div class="sub" id="status">Carregando…</div>
       </div>
       <div class="row nowrap">
         <button class="btn icon" id="btnRefresh" type="button" aria-label="Atualizar cotações" title="Atualizar cotações">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
         </button>
-        <button class="btn icon badge-wrap" id="btnPend" type="button" aria-label="Pendências" title="Pendências" data-tab="pendencias">
+        <button class="btn icon badge-wrap" id="btnPend" type="button" aria-label="Pendências" title="Pendências" data-page="pend">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
           <span class="badge" id="pendCount" hidden>0</span>
         </button>
-        <button class="btn icon" id="btnAjustes" type="button" aria-label="Ajustes" title="Ajustes">
+        <button class="btn icon" id="btnAjustes" type="button" aria-label="Ajustes" title="Ajustes" data-page="ajustes">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         </button>
       </div>
@@ -37,8 +40,7 @@
       <section id="tab-ativos" class="wrap" hidden></section>
       <section id="tab-proventos" class="wrap" hidden></section>
       <section id="tab-lancamentos" class="wrap" hidden></section>
-      <section id="tab-ajustes" class="wrap" hidden></section>
-      <section id="tab-pendencias" class="wrap" hidden></section>
+      <section id="page" class="wrap" hidden></section>
     </main>
   </div>
 

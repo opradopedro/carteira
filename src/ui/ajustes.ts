@@ -1,15 +1,13 @@
 import { hist, state } from '../app';
-import { $, esc, fmtD, fmtQuando } from './fmt';
+import { esc, fmtD, fmtQuando } from './fmt';
 
-export async function renderAjustes() {
-  const el = $('#tab-ajustes');
+export async function renderAjustes(el: HTMLElement) {
   const c = state.cfg;
   const est = await navigator.storage?.estimate?.().catch(() => null);
   const usado = est?.usage != null ? `${(est.usage / 1024 / 1024).toFixed(1).replace('.', ',')} MB usados neste aparelho.` : '';
   const m = hist.meta;
   el.innerHTML = `
   <div class="panel">
-    <div class="row" style="justify-content:space-between"><h2>Ajustes</h2><button class="btn small" type="button" data-tab="resumo">Fechar</button></div>
     <div class="sub">Tudo o que você lança fica só neste aparelho. Para buscar cotações, o app envia apenas os códigos dos ativos (ex.: PETR4), nunca quantidades ou valores.</div>
   </div>
 
@@ -51,7 +49,7 @@ export async function renderAjustes() {
   <div class="panel">
     <h2>Armazenamento</h2>
     <div class="sub">${state.persist ? 'Armazenamento persistente ativo: o navegador não apaga seus dados para liberar espaço.' : 'O navegador ainda não garantiu armazenamento persistente. Instalar o app na tela inicial costuma resolver; mesmo assim, mantenha backups.'} ${usado}</div>
-    ${m ? `<div class="note">Histórico público gerado em ${fmtQuando(m.geradoEm)}${m.b3?.ultimo ? ` · B3 até ${fmtD(m.b3.ultimo)}` : ''}${m.tesouroUltimo ? ` · Tesouro até ${fmtD(m.tesouroUltimo)}` : ''}.</div>` : ''}
+    ${m ? `<div class="note">Versão ${__VERSAO__} · histórico público gerado em ${fmtQuando(m.geradoEm)}${m.b3?.ultimo ? ` · B3 até ${fmtD(m.b3.ultimo)}` : ''}${m.tesouroUltimo ? ` · Tesouro até ${fmtD(m.tesouroUltimo)}` : ''}.</div>` : ''}
     <div class="row"><button class="btn danger" type="button" id="btnWipe">Apagar todos os dados</button></div>
   </div>`;
 }

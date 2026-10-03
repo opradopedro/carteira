@@ -1,4 +1,5 @@
 import { model, state } from '../app';
+import { CLASSES, type Classe } from '../core/types';
 import { today, ymd } from '../core/util';
 import { barChart } from './charts';
 import { $, MES, brl, esc, fmtD, fmtNum, fmtQuando } from './fmt';
@@ -14,16 +15,25 @@ export function renderProventos() {
   }
   for (const l of sorted) if (l.t === 'P') { const b = bars.find(b => b.k === l.d.slice(0, 7)); if (b) b.v += l.v; }
   const payers = list.filter(p => p.prov > 0).sort((a, b) => b.prov12 - a.prov12 || b.prov - a.prov);
+  const porClasse = new Map<Classe, { v12: number; v: number }>();
+  for (const p of payers) {
+    const o = porClasse.get(p.c) || { v12: 0, v: 0 };
+    o.v12 += p.prov12; o.v += p.prov; porClasse.set(p.c, o);
+  }
   el.innerHTML = `
-  <div class="panel">
-    <div class="hero"><span class="label">Recebido nos últimos 12 meses</span><div class="big">${brl.format(tot.prov12)}</div>
-    <div class="sub">${brl.format(tot.prov)} desde o início · média de ${brl.format(tot.prov12 / 12)} por mês</div></div>
+  <div class="panel clickable" data-page="prov" tabindex="0">
+    <div class="row between"><span class="label">Recebido nos últimos 12 meses</span><span class="mais">Ver detalhes ›</span></div>
+    <div class="big">${brl.format(tot.prov12)}</div>
+    <div class="sub">${brl.format(tot.prov)} desde o início · média de ${brl.format(tot.prov12 / 12)} por mês</div>
     <div class="chart" id="chProv"></div>
   </div>
   ${aReceber()}
-  <div class="panel"><h2>Por ativo</h2><div class="list">${payers.length ? payers.map(p => `<div class="item">
-    <div class="name"><span class="dot" style="background:var(--c-${p.c})"></span>${esc(p.a)}</div><div class="val">${brl.format(p.prov)}</div>
-    <div class="meta">${brl.format(p.prov12)} em 12 meses</div><div class="meta r">${p.cost && p.prov12 ? 'rende ' + fmtNum(p.prov12 / p.cost * 100) + '% do custo' : ''}</div></div>`).join('') : '<div class="empty">Nenhum provento lançado ainda.</div>'}</div></div>`;
+  ${porClasse.size ? `<div class="panel"><h2>Por categoria</h2><div class="list">${[...porClasse.entries()].sort((a, b) => b[1].v12 - a[1].v12).map(([c, o]) => `<button type="button" class="item" data-page="prov:c:${c}">
+    <div class="name"><span class="dot" style="background:var(--c-${c})"></span>${CLASSES[c]}</div><div class="val">${brl.format(o.v12)} ›</div>
+    <div class="meta">em 12 meses</div><div class="meta r">${brl.format(o.v)} no total</div></button>`).join('')}</div></div>` : ''}
+  <div class="panel"><h2>Por ativo</h2><div class="list">${payers.length ? payers.map(p => `<button type="button" class="item" data-page="prov:a:${esc(p.a)}">
+    <div class="name"><span class="dot" style="background:var(--c-${p.c})"></span>${esc(p.a)}</div><div class="val">${brl.format(p.prov)} ›</div>
+    <div class="meta">${brl.format(p.prov12)} em 12 meses</div><div class="meta r">${p.cost && p.prov12 ? 'rende ' + fmtNum(p.prov12 / p.cost * 100) + '% do custo' : ''}</div></button>`).join('') : '<div class="empty">Nenhum provento lançado ainda.</div>'}</div></div>`;
   barChart($('#chProv'), bars);
 }
 

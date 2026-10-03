@@ -5,8 +5,12 @@ import { VitePWA } from 'vite-plugin-pwa';
 const repo = process.env.GITHUB_REPOSITORY?.split('/')[1];
 const base = process.env.BASE_PATH ?? (repo ? `/${repo}/` : '/');
 
+// Versão exibida em Ajustes: commit publicado (no GitHub) e data do build.
+const versao = `${(process.env.GITHUB_SHA || 'local').slice(0, 7)} · ${new Date().toISOString().slice(0, 10)}`;
+
 export default defineConfig({
   base,
+  define: { __VERSAO__: JSON.stringify(versao) },
   build: { target: 'es2022' },
   plugins: [
     VitePWA({

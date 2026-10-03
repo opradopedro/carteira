@@ -143,26 +143,22 @@ async function cripto() {
 }
 
 async function bcb() {
-  // O BCB costuma recusar conexões de fora do Brasil (como os servidores do GitHub).
-  // Por isso o app consulta o BCB direto do celular e só usa este arquivo como reserva.
-  const sgs = async (code, ini, fim) => {
-    const fmt = d => `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
-    const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${code}/dados?formato=json&dataInicial=${fmt(ini)}&dataFinal=${fmt(fim)}`;
-    const arr = await (await fetchRetry(url, { timeout: 60_000 }, 2)).json();
-    return arr.map(o => [o.data.split('/').reverse().join('-'), parseFloat(o.valor)]);
+  // Índices do Banco Central via Ipeadata (aceita conexões de fora do Brasil e do navegador).
+  // O BCB direto recusa os servidores do GitHub; fica como segunda opção.
+  const ipea = async code => {
+    const j = await (await fetchRetry(`http://www.ipeadata.gov.br/api/odata4/ValoresSerie(SERCODIGO='${code}')`, { timeout: 120_000 }, 3)).json();
+    return j.value.filter(o => o.VALVALOR != null).map(o => [o.VALDATA.slice(0, 10), o.VALVALOR]);
   };
   try {
-    const meio = new Date(Date.UTC(START_YEAR + 9, 11, 31));
-    const cdi = [
-      ...await sgs(12, new Date(Date.UTC(START_YEAR, 0, 1)), meio),
-      ...await sgs(12, new Date(meio.getTime() + 864e5), now),
-    ];
-    const ipca = await sgs(433, new Date(Date.UTC(START_YEAR, 0, 1)), now);
-    const selic = await sgs(432, new Date(now.getTime() - 40 * 864e5), now);
-    writeJson('bcb.json', { cdi, ipca, selic: selic.at(-1)?.[1] ?? null, em: now.toISOString() });
-    console.log('BCB: ok');
+    const desde = `${START_YEAR}-01-01`;
+    const cdi = (await ipea('SGS366_CDI366')).filter(([d]) => d >= desde);
+    const ipca = (await ipea('PRECOS12_IPCAG12')).filter(([d]) => d >= desde);
+    const selic = (await ipea('BM366_TJOVER366')).at(-1)?.[1] ?? null;
+    if (cdi.length < 1000 || ipca.length < 60) throw new Error('séries incompletas');
+    writeJson('bcb.json', { cdi, ipca, selic, em: now.toISOString(), fonte: 'Ipeadata' });
+    console.log(`Índices: CDI até ${cdi.at(-1)[0]}, IPCA até ${ipca.at(-1)[0]}`);
   } catch (e) {
-    console.log(`BCB indisponível daqui (${e.message}); o app consulta direto.`);
+    problemas.push(`Índices (Ipeadata): ${e.message}`);
     await keepPublished('bcb.json');
   }
 }

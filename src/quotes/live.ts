@@ -3,7 +3,6 @@ import type { Cotacao, Posicao, Precos } from '../core/types';
 import { isB3Ticker } from '../core/util';
 import type { Config, Indices } from '../data/db';
 import type { Historico } from './hist';
-import type { SerieDiaria, SerieMensal } from '../core/perf';
 
 export const COINGECKO_IDS: Record<string, string> = {
   BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', USDT: 'tether', USDC: 'usd-coin',
@@ -106,36 +105,27 @@ export async function refreshQuotes(open: Posicao[], antigos: Precos, cfg: Confi
   return { precos, falhas, avisos };
 }
 
-/** CDI diário, IPCA mensal e Selic meta. Tenta o BCB direto; se falhar, usa o arquivo publicado. */
-export async function refreshIndices(desde: string, atual: Indices | undefined, hist: Historico): Promise<Indices | null> {
-  const fmt = (iso: string) => iso.split('-').reverse().join('/');
-  const toIso = (br: string) => br.split('/').reverse().join('-');
-  const hoje = new Date().toISOString().slice(0, 10);
-  const sgs = async (code: number, ini: string, fim: string) => {
-    const arr = await getJson(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${code}/dados?formato=json&dataInicial=${fmt(ini)}&dataFinal=${fmt(fim)}`, {}, 25000);
-    return (arr as { data: string; valor: string }[]).map(o => [toIso(o.data), parseFloat(o.valor)] as [string, number]);
-  };
+/**
+ * CDI diário, IPCA mensal e Selic. Primeiro o arquivo publicado com o app (gerado 2x por dia
+ * a partir do Ipeadata); se estiver velho, consulta o Ipeadata direto. Nada da carteira é enviado.
+ */
+export async function refreshIndices(atual: Indices | undefined, hist: Historico): Promise<Indices | null> {
+  const velho = (ix?: { cdi: [string, number][] } | null) =>
+    !ix?.cdi?.length || Date.now() - Date.parse(ix.cdi.at(-1)![0]) > 6 * 864e5;
+  const arq = await hist.bcb().catch(() => null);
+  if (arq && !velho(arq)) return { cdi: arq.cdi, ipca: arq.ipca, selic: arq.selic, em: new Date().toISOString() };
   try {
-    // A API aceita no máximo 10 anos por consulta: busca só o que falta, em janelas.
-    let cdi: SerieDiaria = atual?.cdi ?? [];
-    const ultimoCdi = cdi.at(-1)?.[0];
-    let ini = ultimoCdi && ultimoCdi >= desde ? ultimoCdi : desde;
-    if (!ultimoCdi || ultimoCdi < desde) cdi = [];
-    while (ini <= hoje) {
-      const fimJanela = new Date(Date.parse(ini) + 9 * 365 * 864e5).toISOString().slice(0, 10);
-      const fim = fimJanela < hoje ? fimJanela : hoje;
-      const novos = await sgs(12, ini, fim);
-      const set = new Set(cdi.map(x => x[0]));
-      cdi = [...cdi, ...novos.filter(x => !set.has(x[0]))];
-      ini = new Date(Date.parse(fim) + 864e5).toISOString().slice(0, 10);
-    }
-    const ipca: SerieMensal = await sgs(433, desde.slice(0, 8) + '01', hoje);
-    const selicArr = await sgs(432, new Date(Date.now() - 40 * 864e5).toISOString().slice(0, 10), hoje);
-    return { cdi, ipca, selic: selicArr.at(-1)?.[1] ?? null, em: new Date().toISOString() };
+    const ipea = async (code: string) => {
+      const j = await getJson(`https://www.ipeadata.gov.br/api/odata4/ValoresSerie(SERCODIGO='${code}')`, {}, 40000);
+      return (j.value as { VALDATA: string; VALVALOR: number | null }[])
+        .filter(o => o.VALVALOR != null).map(o => [o.VALDATA.slice(0, 10), o.VALVALOR!] as [string, number]);
+    };
+    const [cdi, ipca, selic] = await Promise.all([ipea('SGS366_CDI366'), ipea('PRECOS12_IPCAG12'), ipea('BM366_TJOVER366')]);
+    const desde = '2016-01-01';
+    return { cdi: cdi.filter(x => x[0] >= desde), ipca: ipca.filter(x => x[0] >= desde), selic: selic.at(-1)?.[1] ?? null, em: new Date().toISOString() };
   } catch {
-    const arq = await hist.bcb();
-    if (arq && (!atual || arq.em > atual.em)) return { cdi: arq.cdi, ipca: arq.ipca, selic: arq.selic, em: arq.em };
-    return null;
+    if (arq) return { cdi: arq.cdi, ipca: arq.ipca, selic: arq.selic, em: new Date().toISOString() };
+    return atual ?? null;
   }
 }
 

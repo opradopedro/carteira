@@ -1,19 +1,19 @@
 import './style.css';
 import { registerSW } from 'virtual:pwa-register';
 import * as app from './app';
-import { model, state, type Periodo, type Tab } from './app';
+import { model, state } from './app';
+import type { Periodo } from './core/analise';
 import { buildBackup, downloadJson, parseBackup } from './data/backup';
 import type { Classe, TipoLanc } from './core/types';
 import { cleanTicker, guessClass, newId, parseNum, today } from './core/util';
 import { $, fmtQuando, toast } from './ui/fmt';
-import { renderResumo, renderRent } from './ui/resumo';
+import { renderResumo } from './ui/resumo';
 import { renderAtivos } from './ui/ativos';
 import { renderProventos } from './ui/proventos';
 import { renderLancs, setFiltro } from './ui/lancamentos';
-import { renderAjustes } from './ui/ajustes';
-import { renderBadge, renderPendencias } from './ui/pendencias';
-
-const TABS: Tab[] = ['resumo', 'ativos', 'proventos', 'lancamentos', 'ajustes', 'pendencias'];
+import { renderBadge } from './ui/pendencias';
+import { renderPagina, tituloPagina } from './ui/paginas';
+import { TABS, back, currentPage, initNav, nav, openPage, parsePage, setRenderView, setTab, type Tab } from './ui/nav';
 
 function applyTheme() {
   const t = state.cfg.tema;
@@ -26,6 +26,10 @@ function applyTheme() {
 function renderHeader() {
   const st = $('#status'), bn = $('#banner');
   const online = navigator.onLine;
+  const page = currentPage();
+  $('#btnBack').hidden = !page;
+  document.body.classList.toggle('em-pagina', !!page);
+  $('#title').textContent = page ? tituloPagina(page) : 'Minha Carteira';
   if (!state.ready) st.textContent = 'Carregando…';
   else if (state.refreshing) st.textContent = 'Atualizando cotações…';
   else if (state.cotEm) st.textContent = (online ? 'Cotações de ' : 'Offline · cotações de ') + fmtQuando(state.cotEm);
@@ -36,36 +40,38 @@ function renderHeader() {
   const msgs: string[] = [];
   if (state.ready && !online && state.lancs.length) msgs.push('Sem internet: mostrando as últimas cotações salvas.');
   msgs.push(...state.falhas);
-  if (state.ready && model.tot.semCot) msgs.push(`${model.tot.semCot} ${model.tot.semCot === 1 ? 'ativo está' : 'ativos estão'} sem cotação e aparece${model.tot.semCot === 1 ? '' : 'm'} pelo custo. Informe o preço em Ativos.`);
-  bn.hidden = !msgs.length;
+  if (state.ready && model.tot.semCot) msgs.push(`${model.tot.semCot} ${model.tot.semCot === 1 ? 'ativo está' : 'ativos estão'} sem cotação e aparece${model.tot.semCot === 1 ? '' : 'm'} pelo custo. Veja Pendências.`);
+  bn.hidden = !msgs.length || !!page;
   bn.innerHTML = '';
   for (const m of msgs) { const d = document.createElement('div'); d.textContent = m; bn.appendChild(d); }
 }
 
+/** Desenha a tela atual: uma página de detalhe (se houver) ou a aba. */
 function render() {
   renderHeader();
   renderBadge();
-  if (state.tab === 'resumo') renderResumo();
-  if (state.tab === 'ativos') renderAtivos();
-  if (state.tab === 'proventos') renderProventos();
-  if (state.tab === 'lancamentos') renderLancs();
+  const page = currentPage();
+  $('#page').hidden = !page;
+  for (const t of TABS) $('#tab-' + t).hidden = !!page || t !== nav.tab;
+  document.querySelectorAll<HTMLButtonElement>('nav button').forEach(b =>
+    !page && b.dataset.tab === nav.tab ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
+  if (page) { renderPagina($('#page'), page); return; }
+  if (nav.tab === 'resumo') renderResumo();
+  if (nav.tab === 'ativos') renderAtivos();
+  if (nav.tab === 'proventos') renderProventos();
+  if (nav.tab === 'lancamentos') renderLancs();
 }
 
-function setTab(tab: Tab) {
-  state.tab = tab;
-  for (const t of TABS) $('#tab-' + t).hidden = t !== tab;
-  document.querySelectorAll<HTMLButtonElement>('nav button').forEach(b =>
-    b.dataset.tab === tab ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
-  try { history.replaceState(null, '', '#' + tab); } catch { /* ignora */ }
-  window.scrollTo(0, 0);
-  if (tab === 'ajustes') renderAjustes();
-  if (tab === 'pendencias') renderPendencias();
+/** Re-desenha só a página aberta (após mudar um filtro, por exemplo), mantendo a rolagem. */
+function rerenderPagina() {
+  const y = window.scrollY;
   render();
+  window.scrollTo(0, y);
 }
 
 /* ---------- formulário de lançamento ---------- */
 function openForm() {
-  setTab('lancamentos');
+  if (nav.tab !== 'lancamentos' || currentPage()) setTab('lancamentos');
   $('#formPanel').hidden = false; $('#formErr').hidden = true;
   const fd = $<HTMLInputElement>('#fData');
   if (!fd.value) fd.value = today();
@@ -103,17 +109,28 @@ async function submitForm(e: Event) {
 
 /* ---------- eventos ---------- */
 document.addEventListener('click', async e => {
-  const t = (e.target as HTMLElement).closest('button');
+  const target = e.target as HTMLElement;
+  // Cards e linhas que abrem uma página de detalhe (exceto toques em gráficos e controles internos).
+  const pg = target.closest<HTMLElement>('[data-page]');
+  if (pg) {
+    const ctl = target.closest('button, input, select, label, .ichart, a');
+    if (!ctl || ctl === pg || !pg.contains(ctl)) {
+      const p = parsePage(pg.dataset.page!);
+      if (p) { openPage(p); return; }
+    }
+  }
+  const t = target.closest('button');
   if (!t) return;
   const ds = t.dataset;
   if (ds.tab) setTab(ds.tab as Tab);
+  else if (t.id === 'btnBack') back();
   else if (t.id === 'btnAdd') openForm();
   else if (t.id === 'btnCancel') $('#formPanel').hidden = true;
   else if (t.id === 'btnRefresh') { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh('tudo'); }
-  else if (t.id === 'btnAjustes') setTab(state.tab === 'ajustes' ? 'resumo' : 'ajustes');
-  else if (ds.per) {
-    state.periodo = ds.per === 'y' ? { tipo: 'y', ano: Number(ds.ano) } : ds.per === 'custom' ? { ...state.periodo, tipo: 'custom' } : { tipo: ds.per as Periodo['tipo'] };
-    renderRent();
+  else if (ds.per && ds.perChave) {
+    const k = ds.perChave as keyof typeof state.per;
+    state.per[k] = ds.per === 'y' ? { tipo: 'y', ano: Number(ds.ano) } : ds.per === 'custom' ? { ...state.per[k], tipo: 'custom' } : { tipo: ds.per as Periodo['tipo'] };
+    rerenderPagina();
   }
   else if (ds.venc) {
     const inp = $<HTMLInputElement>('#venc-' + CSS.escape(ds.venc));
@@ -121,13 +138,11 @@ document.addEventListener('click', async e => {
     const l = state.lancs.find(x => x.id === ds.venc);
     if (!(v > 0) || !l) { toast('Informe o valor recebido.'); return; }
     await app.updateLanc(l.id, { v, p: v / l.q });
-    toast('Valor salvo: o rendimento já entra nos cálculos'); renderPendencias();
+    toast('Valor salvo: o rendimento já entra nos cálculos');
   }
-  else if (ds.ignorar) { await app.ignorarPendencia(ds.ignorar); renderPendencias(); }
-  else if (ds.filtrar) { setFiltro(ds.filtrar); setTab('lancamentos'); $<HTMLInputElement>('#filtro').value = ds.filtrar; renderLancs(); }
-  else if (ds.abrirAtivo) { state.open = ds.abrirAtivo; setTab('ativos'); }
-  else if (t.id === 'btnReverIgnoradas') { await app.reverIgnoradas(); renderPendencias(); }
-  else if (ds.open) { state.open = state.open === ds.open ? null : ds.open; renderAtivos(); }
+  else if (ds.ignorar) { await app.ignorarPendencia(ds.ignorar); }
+  else if (ds.filtrar) { setFiltro(ds.filtrar); setTab('lancamentos'); setTimeout(() => { $<HTMLInputElement>('#filtro').value = ds.filtrar!; renderLancs(); }, 50); }
+  else if (t.id === 'btnReverIgnoradas') { await app.reverIgnoradas(); }
   else if (ds.savepx) {
     const p = parseNum($<HTMLInputElement>('#px').value);
     if (p > 0) { await app.setPrecoManual(ds.savepx, p); toast('Preço salvo'); }
@@ -174,9 +189,11 @@ document.addEventListener('change', async e => {
   if (el.id === 'fTipo') syncForm();
   else if (el.id === 'cls' && el.dataset.cls) { await app.setClasse(el.dataset.cls, el.value as Classe); toast('Classe alterada'); }
   else if (el.id === 'cTema') { await app.saveConfig({ tema: el.value as 'auto' | 'claro' | 'escuro' }); applyTheme(); }
-  else if (el.id === 'perIni' || el.id === 'perFim') {
-    state.periodo = { tipo: 'custom', ini: $<HTMLInputElement>('#perIni').value || undefined, fim: $<HTMLInputElement>('#perFim').value || undefined };
-    renderRent();
+  else if (el.dataset.perIni || el.dataset.perFim) {
+    const k = (el.dataset.perIni || el.dataset.perFim) as keyof typeof state.per;
+    const v = (sel: string) => (document.querySelector<HTMLInputElement>(sel)?.value || undefined);
+    state.per[k] = { tipo: 'custom', ini: v(`[data-per-ini="${k}"]`), fim: v(`[data-per-fim="${k}"]`) };
+    rerenderPagina();
   }
   else if (el.id === 'fileB3') {
     const files = [...(el.files || [])]; el.value = '';
@@ -231,20 +248,24 @@ async function exportBackup() {
 async function backupFeito() {
   await app.marcarBackup();
   toast('Backup exportado');
-  if (state.tab === 'pendencias') renderPendencias();
 }
 
 window.addEventListener('online', () => { render(); if (state.lancs.length) app.refresh('diario'); });
 window.addEventListener('offline', render);
-let rz = 0;
-window.addEventListener('resize', () => { clearTimeout(rz); rz = window.setTimeout(render, 150); });
+// Só redesenha se a largura mudar (no celular, a barra de endereço muda a altura ao rolar).
+let rz = 0, largura = window.innerWidth;
+window.addEventListener('resize', () => {
+  clearTimeout(rz);
+  rz = window.setTimeout(() => { if (window.innerWidth !== largura) { largura = window.innerWidth; render(); } }, 150);
+});
 
 /* ---------- início ---------- */
 async function start() {
   app.setOnChange(render);
-  const h = location.hash.slice(1) as Tab;
+  setRenderView(render);
+  initNav(location.hash.slice(1));
   renderLancs(); syncForm();
-  setTab(TABS.includes(h) ? h : 'resumo');
+  render();
   await app.init();
   applyTheme();
   render();

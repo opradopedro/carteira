@@ -37,7 +37,7 @@ export class Historico {
     const anos = this.meta?.b3?.anos ?? [];
     const primeiro = lancs.reduce((m, l) => (l.d < m ? l.d : m), '9999');
     const y0 = parseInt(primeiro.slice(0, 4), 10);
-    const precisaB3 = lancs.some(l => l.c !== 'tesouro' && l.c !== 'cripto');
+    const precisaB3 = true; // também serve para o Ibovespa (BOVA11) e para classificar ativos
     const tasks: Promise<unknown>[] = [];
     if (precisaB3 || lancs.length === 0) {
       for (const y of anos) {

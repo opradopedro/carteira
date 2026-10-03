@@ -4,14 +4,14 @@ import { compute } from './core/calc';
 import { pendencias as calcPendencias, type Pendencia } from './core/pendencias';
 import { monthlySeries, type PontoMes } from './core/perf';
 import { keyOf, mergeImport, rowsToAReceber, rowsToLancs, type AReceber, type ResultadoLeitura } from './core/b3';
-import { addMonths, today, ymd } from './core/util';
+import { today, ymd } from './core/util';
 import * as db from './data/db';
 import type { Config, Indices } from './data/db';
 import { Historico } from './quotes/hist';
 import { refreshIndices, refreshQuotes } from './quotes/live';
 
-export type Tab = 'resumo' | 'ativos' | 'proventos' | 'lancamentos' | 'ajustes' | 'pendencias';
-export interface Periodo { tipo: '12m' | 'ano' | 'tudo' | 'y' | 'custom'; ano?: number; ini?: string; fim?: string }
+import type { Periodo } from './core/analise';
+export type { Periodo };
 
 export const state = {
   ready: false,
@@ -20,9 +20,8 @@ export const state = {
   indices: null as Indices | null,
   cfg: {} as Config,
   cotEm: '',
-  tab: 'resumo' as Tab,
-  open: null as string | null,
-  periodo: { tipo: '12m' } as Periodo,
+  /** Período escolhido em cada página de detalhe. */
+  per: { rent: { tipo: '12m' }, evo: { tipo: 'tudo' }, prov: { tipo: '12m' }, classe: { tipo: '12m' } } as Record<'rent' | 'evo' | 'prov' | 'classe', Periodo>,
   refreshing: false,
   histPronto: false,
   falhas: [] as string[],
@@ -40,7 +39,21 @@ export let serie: PontoMes[] = [];
 let onChange: () => void = () => {};
 export const setOnChange = (fn: () => void) => { onChange = fn; };
 
+const cacheSeries = new Map<string, PontoMes[]>();
+
+/** Série mensal de um pedaço da carteira (uma classe, um ativo), com cache até o próximo recálculo. */
+export function serieDe(chave: string, filtro: (l: Lancamento) => boolean, valorAtual: number): PontoMes[] {
+  if (!state.histPronto) return [];
+  let s = cacheSeries.get(chave);
+  if (!s) {
+    s = monthlySeries(state.lancs.filter(filtro), hist.priceAt, today(), { v: valorAtual });
+    cacheSeries.set(chave, s);
+  }
+  return s;
+}
+
 export function recompute() {
+  cacheSeries.clear();
   model = compute(state.lancs, state.precos);
   serie = state.histPronto
     ? monthlySeries(state.lancs, hist.priceAt, today(), { v: model.tot.value })
@@ -113,25 +126,13 @@ export async function refresh(modo: ModoAtualizacao = 'diario') {
   }
 }
 
-/** CDI/IPCA/Selic: uma vez por dia (ou quando faltar o período dos lançamentos). */
+/** CDI/IPCA/Selic: uma vez por dia. */
 async function atualizarIndices(forcar: boolean) {
-  if (!navigator.onLine) return;
-  const desde = desdeIndices();
-  const cobre = state.indices?.cdi?.[0]?.[0] && state.indices.cdi[0][0] <= addDays(desde, 7);
-  if (!forcar && cobre && ehHoje(state.indices?.em)) return;
-  const ix = await refreshIndices(desde, cobre ? state.indices ?? undefined : undefined, hist);
-  if (ix) { state.indices = ix; await db.setKV('indices', ix); }
-  else state.falhas = [...state.falhas, 'Não consegui buscar CDI/IPCA no Banco Central agora.'];
+  if (!forcar && state.indices?.cdi?.length && ehHoje(state.indices.em)) return;
+  const ix = await refreshIndices(state.indices ?? undefined, hist);
+  if (ix?.cdi?.length) { state.indices = ix; await db.setKV('indices', ix); }
+  else state.falhas = [...state.falhas, 'Não consegui buscar CDI/IPCA agora.'];
   onChange();
-}
-
-const addDays = (iso: string, n: number) => new Date(Date.parse(iso) + n * 864e5).toISOString().slice(0, 10);
-
-/** Desde quando precisamos de CDI/IPCA: o primeiro lançamento ou 13 meses atrás. */
-function desdeIndices(): string {
-  const treze = addMonths(today().slice(0, 7), -13) + '-01';
-  const primeiro = state.lancs.reduce((m, l) => (l.d < m ? l.d : m), treze);
-  return primeiro < treze ? primeiro.slice(0, 8) + '01' : treze;
 }
 
 export async function addLanc(l: Lancamento) {
