@@ -97,6 +97,40 @@ export class Historico {
   }
 
   /** Classe segundo a B3 (para separar FIIs de units e ETFs terminados em 11). */
+  /**
+   * Preço de um ativo numa data (para preencher o lançamento manual): fechamento do pregão
+   * na B3, PU de compra/venda do Tesouro ou fechamento do dia no Mercado Bitcoin.
+   * Se a data cair em fim de semana ou feriado, usa o último dia útil anterior.
+   */
+  async precoNoDia(a: string, c: Classe, iso: string, venda = false): Promise<{ p: number; d: string; fonte: string } | null> {
+    const ultimoAte = (dias: string[], vals: (number | null)[]) => {
+      for (let i = dias.length - 1; i >= 0; i--) if (dias[i] <= iso && vals[i]) return { p: vals[i]!, d: dias[i] };
+      return null;
+    };
+    const ano = parseInt(iso.slice(0, 4), 10);
+    if (c === 'cripto') {
+      const d = await getJson<Record<string, { d: string[]; p: number[] }>>('cripto-d.json');
+      const s = d?.[a];
+      const r = s ? ultimoAte(s.d, s.p) : null;
+      return r && r.d >= addDaysIso(iso, -7) ? { ...r, fonte: 'Mercado Bitcoin' } : null;
+    }
+    for (const y of [ano, ano - 1]) {
+      if (c === 'tesouro') {
+        const d = await getJson<{ d: string[]; c: Record<string, (number | null)[]>; v: Record<string, (number | null)[]> }>(`tesouro-d/${y}.json`);
+        const vals = d ? (venda ? d.v : d.c)[a] : null;
+        const r = d && vals ? ultimoAte(d.d, vals) : null;
+        if (r) return { ...r, fonte: venda ? 'Tesouro Direto (preço de venda)' : 'Tesouro Direto (preço de compra)' };
+      } else {
+        const letra = /^[A-Z]/.test(a[0]) ? a[0] : '_';
+        const d = await getJson<{ d: string[]; p: Record<string, (number | null)[]> }>(`b3d/${y}/${letra}.json`);
+        const vals = d?.p[a];
+        const r = d && vals ? ultimoAte(d.d, vals) : null;
+        if (r) return r.d >= addDaysIso(iso, -15) ? { ...r, fonte: 'fechamento B3' } : null;
+      }
+    }
+    return null;
+  }
+
   /** Carrega o que a busca de ativos precisa: o ano mais recente da B3 e os títulos do Tesouro. */
   async carregarBusca(): Promise<void> {
     this.meta ||= await getJson<Meta>('meta.json');
@@ -139,3 +173,5 @@ export class Historico {
 }
 
 const lastMonthIdx = (d: B3Ano) => (d.ultimo ? parseInt(d.ultimo.slice(5, 7), 10) - 1 : 11);
+
+const addDaysIso = (iso: string, n: number) => new Date(Date.parse(iso) + n * 864e5).toISOString().slice(0, 10);

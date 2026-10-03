@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anoNoNome, createCotahistAccumulator, monthRange, parseMbCandles, parseTesouroCsv, tesouroKey } from '../scripts/lib.mjs';
+import { anoNoNome, createCotahistAccumulator, monthRange, parseMbCandles, parseMbDiario, parseTesouroCsv, tesouroDiario, tesouroKey } from '../scripts/lib.mjs';
 
 // Linhas no layout oficial do arquivo COTAHIST da B3 (cotações públicas).
 const linha = (data: string, bdi: string, ticker: string, nome: string, fech: string) =>
@@ -21,6 +21,10 @@ describe('COTAHIST', () => {
     expect(r.k).toEqual({ PETR4: 'a', MXRF11: 'f', BOVA11: 'o' });
     expect(r.ultimo).toBe('2026-10-01');
     expect(r.n.MXRF11).toBe('FII MAXI REN');
+    const d = acc.diario();
+    expect(d.P.d).toEqual(['2026-09-29', '2026-09-30', '2026-10-01']);
+    expect(d.P.p.PETR4).toEqual([49.77, 50.10, 51.17]);
+    expect(d.M.p.MXRF11).toEqual([null, null, 9.09]);
   });
 });
 
@@ -44,6 +48,12 @@ describe('Tesouro Transparente', () => {
     expect(anoNoNome('Tesouro Educa+', 2030)).toBe(2026);
     expect(anoNoNome('Tesouro IPCA+', 2029)).toBe(2029);
   });
+  it('diário: PU de compra e de venda por dia, por ano', () => {
+    const d = tesouroDiario(csv);
+    expect(d['2026'].d).toEqual(['2026-08-29', '2026-09-30', '2026-10-01']);
+    expect(d['2026'].c['TESOURO IPCA+ 2029']).toEqual([3450, 3480.10, 3482]);
+    expect(d['2026'].v['TESOURO SELIC 2029']).toEqual([null, null, 19970.63]);
+  });
   it('a chave casa com o nome que vem da B3', () => {
     expect(tesouroKey('Tesouro IPCA+ com Juros Semestrais 2035')).toBe('TESOURO IPCA+ COM JUROS SEMESTRAIS 2035');
   });
@@ -52,6 +62,9 @@ describe('Tesouro Transparente', () => {
 describe('utilitários', () => {
   it('monthRange cruza o ano', () => {
     expect(monthRange('2025-11', '2026-02')).toEqual(['2025-11', '2025-12', '2026-01', '2026-02']);
+  });
+  it('velas diárias do Mercado Bitcoin', () => {
+    expect(parseMbDiario({ t: [Date.UTC(2026, 2, 10) / 1000], c: ['350000.5'] })).toEqual({ d: ['2026-03-10'], p: [350000.5] });
   });
   it('velas mensais do Mercado Bitcoin', () => {
     const r = parseMbCandles({ t: [Date.UTC(2026, 8, 1) / 1000], c: ['433994.00'] }, '2026-08', '2026-09');

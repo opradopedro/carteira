@@ -19,6 +19,8 @@ export function createCotahistAccumulator(year) {
   const lastDay = {}; // ticker -> array(12) com o dia do fechamento guardado
   const k = {};      // ticker -> classe ('a' ação, 'f' FII/Fiagro, 'o' outros)
   const n = {};      // ticker -> nome curto do pregão (ex.: "PETROBRAS"), para a busca do app
+  const diario = {}; // ticker -> { 'AAAA-MM-DD': fechamento }
+  const dias = new Set();
   let ultimo = '';
   return {
     add(line) {
@@ -42,6 +44,23 @@ export function createCotahistAccumulator(year) {
       if (nome) n[ticker] = nome.replace(/\s+/g, ' ');
       const iso = `${data.slice(0, 4)}-${data.slice(4, 6)}-${data.slice(6, 8)}`;
       if (iso > ultimo) ultimo = iso;
+      (diario[ticker] || (diario[ticker] = {}))[iso] = close;
+      dias.add(iso);
+    },
+    /**
+     * Fechamento de cada pregão, dividido em arquivos pela 1ª letra do código
+     * (o app baixa só o pedaço do ativo pedido). Formato: { d: [datas], p: { TICKER: [fechamentos] } }.
+     */
+    diario() {
+      const d = [...dias].sort();
+      /** @type {Record<string, { d: string[], p: Record<string, (number|null)[]> }>} */
+      const partes = {};
+      for (const t of Object.keys(diario).sort()) {
+        const letra = /^[A-Z]/.test(t[0]) ? t[0] : '_';
+        const parte = partes[letra] || (partes[letra] = { d, p: {} });
+        parte.p[t] = d.map(x => diario[t][x] ?? null);
+      }
+      return partes;
     },
     result() {
       const tickers = Object.keys(p).sort();
@@ -133,4 +152,44 @@ export function parseMbCandles(json, startMonth, endMonth) {
     if (idx.has(k) && c > 0) out[idx.get(k)] = c;
   });
   return { m, p: out };
+}
+
+/** Preços diários do Tesouro por ano: PU de compra (o que se paga) e de venda (o que se recebe). */
+export function tesouroDiario(text) {
+  const lines = text.split(/\r?\n/);
+  const header = lines[0].split(';').map(h => h.trim());
+  const iTipo = header.indexOf('Tipo Titulo'), iVenc = header.indexOf('Data Vencimento'), iData = header.indexOf('Data Base');
+  const iC = header.indexOf('PU Compra Manha'), iV = header.indexOf('PU Venda Manha');
+  /** @type {Record<string, Record<string, Record<string, [number, number]>>>} */
+  const porAno = {}; // ano -> título -> data -> [compra, venda]
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(';');
+    if (c.length <= Math.max(iC, iV)) continue;
+    const data = brDate(c[iData]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) continue;
+    const key = tesouroKey(`${c[iTipo]} ${anoNoNome(c[iTipo], parseInt(c[iVenc].trim().slice(-4), 10))}`);
+    const ano = data.slice(0, 4);
+    ((porAno[ano] ||= {})[key] ||= {})[data] = [brNum(c[iC]) || 0, brNum(c[iV]) || 0];
+  }
+  /** @type {Record<string, { d: string[], c: Record<string, (number|null)[]>, v: Record<string, (number|null)[]> }>} */
+  const out = {};
+  for (const [ano, titulos] of Object.entries(porAno)) {
+    const d = [...new Set(Object.values(titulos).flatMap(x => Object.keys(x)))].sort();
+    const o = out[ano] = { d, c: {}, v: {} };
+    for (const [t, m] of Object.entries(titulos)) {
+      o.c[t] = d.map(x => (m[x]?.[0] || null));
+      o.v[t] = d.map(x => (m[x]?.[1] || null));
+    }
+  }
+  return out;
+}
+
+/** Fechamentos diários do Mercado Bitcoin: { d: [datas], p: [preços] }. */
+export function parseMbDiario(json) {
+  const d = [], p = [];
+  (json.t || []).forEach((t, i) => {
+    const c = parseFloat(json.c[i]);
+    if (c > 0) { d.push(new Date(t * 1000).toISOString().slice(0, 10)); p.push(c); }
+  });
+  return { d, p };
 }

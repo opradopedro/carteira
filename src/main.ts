@@ -8,7 +8,7 @@ import type { Classe, TipoLanc } from './core/types';
 import { cleanTicker, guessClass, newId, parseNum, today } from './core/util';
 import { CRIPTO_NOMES, buscarAtivos, type Sugestao } from './core/busca';
 import { CLASSES } from './core/types';
-import { $, fmtQuando, toast } from './ui/fmt';
+import { $, brl, fmtD, fmtQuando, toast } from './ui/fmt';
 import { renderResumo } from './ui/resumo';
 import { renderAtivos } from './ui/ativos';
 import { renderProventos } from './ui/proventos';
@@ -104,10 +104,45 @@ async function submitForm(e: Event) {
     ? { id: newId(), d, t, a, c, q: 0, p: 0, v: val, o: 'manual' as const }
     : { id: newId(), d, t, a, c, q, p, v: q * p, o: 'manual' as const };
   for (const s of ['#fAtivo', '#fQtd', '#fPreco', '#fValor']) $<HTMLInputElement>(s).value = '';
+  $('#fPrecoNota').hidden = true;
   $('#formErr').hidden = true; $('#formPanel').hidden = true;
   await app.addLanc(l);
   toast('Lançamento salvo');
   if (t !== 'P' && !state.precos[a] && navigator.onLine) app.refresh('novos');
+}
+
+/* ---------- preço do dia no lançamento manual ---------- */
+let buscaPreco = 0;
+async function sugerirPreco() {
+  const tipo = $<HTMLSelectElement>('#fTipo').value, d = $<HTMLInputElement>('#fData').value;
+  const a = cleanTicker($<HTMLInputElement>('#fAtivo').value), c = $<HTMLSelectElement>('#fClasse').value as Classe;
+  const inp = $<HTMLInputElement>('#fPreco'), nota = $('#fPrecoNota');
+  const pode = !inp.value || inp.dataset.auto === '1';
+  if (tipo === 'P' || !a || !d) { atualizarTotal(); return; }
+  const id = ++buscaPreco;
+  nota.hidden = false; nota.textContent = 'Buscando o preço do dia…';
+  const r = await app.hist.precoNoDia(a, c, d, tipo === 'V').catch(() => null);
+  if (id !== buscaPreco) return; // o usuário mudou algo enquanto buscava
+  if (!r) {
+    nota.textContent = 'Não achei o preço desse dia para esse ativo. Informe o preço que você pagou.';
+  } else {
+    if (pode) {
+      inp.value = String(Math.round(r.p * 100) / 100 === r.p ? r.p.toFixed(2) : r.p).replace('.', ',');
+      inp.dataset.auto = '1';
+    }
+    const outroDia = r.d !== d ? ` (último dia com negociação antes de ${fmtD(d)})` : '';
+    nota.textContent = `${pode ? 'Preenchido com' : 'Referência:'} ${brl.format(r.p)} — ${r.fonte} em ${fmtD(r.d)}${outroDia}. Se pagou outro preço, é só trocar.`;
+  }
+  atualizarTotal();
+}
+function atualizarTotal() {
+  const q = parseNum($<HTMLInputElement>('#fQtd').value), p = parseNum($<HTMLInputElement>('#fPreco').value);
+  const nota = $('#fPrecoNota');
+  nota.querySelector('.total')?.remove();
+  if (q > 0 && p > 0 && $<HTMLSelectElement>('#fTipo').value !== 'P') {
+    const t = document.createElement('b'); t.className = 'total'; t.textContent = ` Total da operação: ${brl.format(q * p)}.`;
+    nota.hidden = false; nota.appendChild(t);
+  }
 }
 
 /* ---------- sugestões do campo Ativo ---------- */
@@ -139,6 +174,7 @@ function escolherSugestao(i: number) {
   $('#sugAtivo').hidden = true;
   $('#fAtivo').setAttribute('aria-expanded', 'false');
   $<HTMLInputElement>('#fQtd').focus();
+  sugerirPreco();
 }
 // Escolher na lista sem tirar o foco do campo (evita fechar a lista antes do toque valer).
 document.addEventListener('pointerdown', e => {
@@ -252,7 +288,8 @@ document.addEventListener('submit', async e => {
 
 document.addEventListener('change', async e => {
   const el = e.target as HTMLInputElement;
-  if (el.id === 'fTipo') syncForm();
+  if (el.id === 'fTipo') { syncForm(); sugerirPreco(); }
+  else if (el.id === 'fData' || el.id === 'fClasse') sugerirPreco();
   else if (el.id === 'cls' && el.dataset.cls) { await app.setClasse(el.dataset.cls, el.value as Classe); toast('Classe alterada'); }
   else if (el.id === 'cTema') { await app.saveConfig({ tema: el.value as 'auto' | 'claro' | 'escuro' }); applyTheme(); }
   else if (el.dataset.perIni || el.dataset.perFim) {
@@ -293,11 +330,17 @@ document.addEventListener('input', e => {
   const el = e.target as HTMLInputElement;
   if (el.id === 'filtro') { setFiltro(el.value); renderLancs(); }
   else if (el.id === 'fAtivo') mostrarSugestoes();
+  else if (el.id === 'fPreco') { el.dataset.auto = ''; atualizarTotal(); }
+  else if (el.id === 'fQtd') atualizarTotal();
 });
 document.addEventListener('focusout', e => {
   if ((e.target as HTMLElement).id !== 'fAtivo') return;
-  setTimeout(() => { $('#sugAtivo').hidden = true; $('#fAtivo').setAttribute('aria-expanded', 'false'); }, 150);
+  setTimeout(() => {
+    if (document.activeElement?.id === 'fAtivo') return; // voltou para o campo: mantém a lista
+    $('#sugAtivo').hidden = true; $('#fAtivo').setAttribute('aria-expanded', 'false');
+  }, 150);
   guessFormClass();
+  sugerirPreco();
 });
 
 async function exportBackup() {

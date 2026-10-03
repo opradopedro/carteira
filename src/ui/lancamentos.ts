@@ -33,6 +33,7 @@ function montar(el: HTMLElement) {
         <select id="fClasse"><option value="acao">Ações</option><option value="fii">FIIs</option><option value="cripto">Cripto</option><option value="tesouro">Tesouro Direto</option><option value="outro">Outros</option></select></div>
       <div class="field" id="wQtd"><label for="fQtd">Quantidade</label><input id="fQtd" inputmode="decimal" placeholder="100 ou 0,0125"></div>
       <div class="field" id="wPreco"><label for="fPreco">Preço unitário (R$)</label><input id="fPreco" inputmode="decimal" placeholder="38,20"></div>
+      <div class="note full" id="fPrecoNota" hidden></div>
       <div class="field full" id="wValor" hidden><label for="fValor">Valor recebido (R$)</label><input id="fValor" inputmode="decimal" placeholder="125,40"></div>
       <div class="row full">
         <button class="btn primary" type="submit">Salvar lançamento</button>

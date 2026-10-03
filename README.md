@@ -6,6 +6,7 @@ PWA pessoal para acompanhar investimentos (ações, FIIs, cripto, Tesouro Direto
 - **Funciona offline**: o app fica em cache (service worker) e mostra as últimas cotações salvas.
 - **Entrada de dados**: planilhas de Negociação e Movimentação da Área do Investidor da B3 (reimportar não duplica), planilha de Eventos (proventos a receber) e lançamento manual.
 - **Pendências**: tela que lista o que precisa de ação manual (valor de resgate de CDB, ativo sem cotação, posição vendida, backup atrasado).
+- **Preço do dia no lançamento manual**: ao escolher ativo e data, o app preenche o fechamento daquele dia (B3), o PU de compra/venda (Tesouro) ou o fechamento do Mercado Bitcoin (cripto), a partir de arquivos diários publicados com o app.
 - **Cotações uma vez por dia**: na primeira abertura do dia e no botão Atualizar, para poupar os limites gratuitos das APIs.
 - **Cotações**: só os códigos dos ativos saem do aparelho.
 
@@ -16,7 +17,7 @@ PWA pessoal para acompanhar investimentos (ações, FIIs, cripto, Tesouro Direto
 | [BCB SGS](https://dadosabertos.bcb.gov.br) | CDI (12), IPCA (433), Selic (432) | consultado direto do celular |
 | B3 COTAHIST | fechamento mensal de todos os ativos, para o histórico | gerado pelo GitHub Actions em `public/data/b3/` |
 | Tesouro Transparente | preço dos títulos do Tesouro Direto | gerado pelo GitHub Actions (o site não aceita chamadas do navegador) |
-| Mercado Bitcoin | histórico mensal de BTC/ETH | gerado pelo GitHub Actions |
+| Mercado Bitcoin | histórico mensal e diário de BTC/ETH | gerado pelo GitHub Actions |
 
 Os arquivos em `public/data/` contêm apenas cotações públicas de mercado. **Nenhum dado pessoal vai para o repositório** (o `.gitignore` bloqueia planilhas e backups).
 

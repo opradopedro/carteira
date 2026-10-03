@@ -42,7 +42,7 @@ export default defineConfig({
           {
             urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.includes('/data/'),
             handler: 'NetworkFirst',
-            options: { cacheName: 'dados-publicos', networkTimeoutSeconds: 8, expiration: { maxEntries: 60 } },
+            options: { cacheName: 'dados-publicos', networkTimeoutSeconds: 8, expiration: { maxEntries: 300 } },
           },
         ],
       },

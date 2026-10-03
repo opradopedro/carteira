@@ -16,7 +16,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createCotahistAccumulator, parseMbCandles, parseTesouroCsv } from './lib.mjs';
+import { createCotahistAccumulator, parseMbCandles, parseMbDiario, parseTesouroCsv, tesouroDiario } from './lib.mjs';
 
 const START_YEAR = 2016;
 const START_MONTH = `${START_YEAR}-01`;
@@ -27,6 +27,8 @@ const SITE_URL = process.env.SITE_URL ||
 const TESOURO_CSV = 'https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv';
 
 mkdirSync(join(OUT, 'b3'), { recursive: true });
+mkdirSync(join(OUT, 'b3d'), { recursive: true });
+mkdirSync(join(OUT, 'tesouro-d'), { recursive: true });
 const now = new Date();
 const curYear = now.getUTCFullYear();
 const curMonth = `${curYear}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -84,6 +86,11 @@ async function b3Year(year) {
   rmSync(zip, { force: true });
   const res = acc.result();
   writeJson(`b3/${year}.json`, res);
+  // Fechamentos diários, um arquivo por letra inicial do código.
+  const dir = join(OUT, 'b3d', String(year));
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  for (const [letra, parte] of Object.entries(acc.diario())) writeJson(`b3d/${year}/${letra}.json`, parte);
   console.log(`B3 ${year}: ${Object.keys(res.p).length} ativos, último pregão ${res.ultimo}`);
   return res.ultimo;
 }
@@ -93,7 +100,7 @@ async function b3() {
   let ultimo = '';
   for (let y = START_YEAR; y <= curYear; y++) {
     const file = join(OUT, 'b3', `${y}.json`);
-    const refazer = !existsSync(file) || y === curYear || (y === curYear - 1 && now.getUTCMonth() === 0);
+    const refazer = !existsSync(file) || !existsSync(join(OUT, 'b3d', String(y), 'P.json')) || y === curYear || (y === curYear - 1 && now.getUTCMonth() === 0);
     try {
       if (refazer) ultimo = (await b3Year(y)) || ultimo;
       else ultimo = JSON.parse(readFileSync(file, 'utf8')).ultimo || ultimo;
@@ -115,6 +122,7 @@ async function tesouro() {
     const text = await (await fetchRetry(TESOURO_CSV)).text();
     const res = parseTesouroCsv(text, START_MONTH);
     writeJson('tesouro.json', res);
+    for (const [ano, dados] of Object.entries(tesouroDiario(text))) if (Number(ano) >= START_YEAR) writeJson(`tesouro-d/${ano}.json`, dados);
     console.log(`Tesouro: ${Object.keys(res.p).length} títulos, último dia ${res.ultimo}`);
     return res.ultimo;
   } catch (e) {
@@ -135,6 +143,12 @@ async function cripto() {
       out.m = res.m; out.p[sym] = res.p;
     }
     writeJson('cripto.json', out);
+    const diario = {};
+    for (const sym of ['BTC', 'ETH']) {
+      const url = `https://api.mercadobitcoin.net/api/v4/candles?symbol=${sym}-BRL&resolution=1d&from=${from}&to=${to}`;
+      diario[sym] = parseMbDiario(await (await fetchRetry(url, { timeout: 60_000 })).json());
+    }
+    writeJson('cripto-d.json', diario);
     console.log('Cripto: ok');
   } catch (e) {
     problemas.push(`Cripto: ${e.message}`);
