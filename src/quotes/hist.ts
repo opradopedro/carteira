@@ -6,7 +6,7 @@ import type { PriceAt } from '../core/perf';
 import { addMonths } from '../core/util';
 
 interface Meta { geradoEm: string; inicio: string; b3?: { anos: number[]; ultimo: string }; tesouroUltimo?: string }
-interface B3Ano { y: number; ultimo: string; p: Record<string, (number | null)[]>; k: Record<string, 'a' | 'f' | 'o'> }
+interface B3Ano { y: number; ultimo: string; p: Record<string, (number | null)[]>; k: Record<string, 'a' | 'f' | 'o'>; n?: Record<string, string> }
 interface Tesouro { ultimo: string; m: string[]; p: Record<string, (number | null)[]>; u: Record<string, [number, string]> }
 interface Cripto { m: string[]; p: Record<string, (number | null)[]> }
 export interface BcbArquivo { cdi: [string, number][]; ipca: [string, number][]; selic: number | null; em: string }
@@ -97,6 +97,33 @@ export class Historico {
   }
 
   /** Classe segundo a B3 (para separar FIIs de units e ETFs terminados em 11). */
+  /** Carrega o que a busca de ativos precisa: o ano mais recente da B3 e os títulos do Tesouro. */
+  async carregarBusca(): Promise<void> {
+    this.meta ||= await getJson<Meta>('meta.json');
+    const y = this.meta?.b3?.anos?.at(-1);
+    const tasks: Promise<unknown>[] = [];
+    if (y && !this.b3[y]) tasks.push(getJson<B3Ano>(`b3/${y}.json`).then(d => { if (d) this.b3[y] = d; }));
+    if (!this.tesouro) tasks.push(getJson<Tesouro>('tesouro.json').then(d => { this.tesouro = d; }));
+    await Promise.all(tasks);
+  }
+
+  /** Todos os ativos conhecidos para a busca: B3 (ano mais recente) e Tesouro Direto em negociação. */
+  catalogo(): { a: string; nome: string; c: Classe }[] {
+    const out: { a: string; nome: string; c: Classe }[] = [];
+    const y = Math.max(...Object.keys(this.b3).map(Number));
+    const d = this.b3[y];
+    if (d) for (const a of Object.keys(d.p)) {
+      const k = d.k[a];
+      out.push({ a, nome: d.n?.[a] ?? '', c: k === 'a' ? 'acao' : k === 'f' ? 'fii' : k === 'o' ? 'outro' : 'acao' });
+    }
+    const t = this.tesouro;
+    if (t) {
+      const recente = t.ultimo.slice(0, 7);
+      for (const [a, [, data]] of Object.entries(t.u)) if (data.slice(0, 7) === recente) out.push({ a, nome: '', c: 'tesouro' });
+    }
+    return out;
+  }
+
   classeB3(a: string): Classe | null {
     const anos = Object.keys(this.b3).map(Number).sort((x, y) => y - x);
     for (const y of anos) {

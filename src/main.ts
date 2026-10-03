@@ -6,6 +6,8 @@ import type { Periodo } from './core/analise';
 import { buildBackup, downloadJson, parseBackup } from './data/backup';
 import type { Classe, TipoLanc } from './core/types';
 import { cleanTicker, guessClass, newId, parseNum, today } from './core/util';
+import { CRIPTO_NOMES, buscarAtivos, type Sugestao } from './core/busca';
+import { CLASSES } from './core/types';
 import { $, fmtQuando, toast } from './ui/fmt';
 import { renderResumo } from './ui/resumo';
 import { renderAtivos } from './ui/ativos';
@@ -76,6 +78,7 @@ function openForm() {
   const fd = $<HTMLInputElement>('#fData');
   if (!fd.value) fd.value = today();
   app.hist.load(state.lancs); // para reconhecer a classe do ativo digitado
+  app.hist.carregarBusca();   // lista de ativos para as sugestões
   $('#formPanel').scrollIntoView({ block: 'start', behavior: 'smooth' });
   $('#fAtivo').focus({ preventScroll: true });
 }
@@ -106,6 +109,42 @@ async function submitForm(e: Event) {
   toast('Lançamento salvo');
   if (t !== 'P' && !state.precos[a] && navigator.onLine) app.refresh('novos');
 }
+
+/* ---------- sugestões do campo Ativo ---------- */
+function fontesBusca(): Sugestao[] {
+  const minhas = new Map<string, Sugestao>();
+  for (const l of state.lancs) if (!minhas.has(l.a)) minhas.set(l.a, { a: l.a, nome: CRIPTO_NOMES[l.a] ?? '', c: l.c, minha: true });
+  const cat = app.hist.catalogo();
+  for (const s of minhas.values()) if (!s.nome) s.nome = cat.find(x => x.a === s.a)?.nome ?? '';
+  return [
+    ...minhas.values(),
+    ...Object.entries(CRIPTO_NOMES).map(([a, nome]) => ({ a, nome, c: 'cripto' as const })),
+    ...cat,
+  ];
+}
+let sugAtuais: Sugestao[] = [];
+function mostrarSugestoes() {
+  const inp = $<HTMLInputElement>('#fAtivo'), box = $('#sugAtivo');
+  sugAtuais = buscarAtivos(inp.value, fontesBusca());
+  box.hidden = !sugAtuais.length;
+  inp.setAttribute('aria-expanded', String(!box.hidden));
+  box.innerHTML = sugAtuais.map((s, i) => `<button type="button" role="option" data-sug="${i}">
+    <b>${s.a}</b><span>${s.nome ? s.nome : ''}</span><em>${s.minha ? 'na carteira' : CLASSES[s.c]}</em></button>`).join('');
+}
+function escolherSugestao(i: number) {
+  const s = sugAtuais[i];
+  if (!s) return;
+  $<HTMLInputElement>('#fAtivo').value = s.a;
+  $<HTMLSelectElement>('#fClasse').value = s.c;
+  $('#sugAtivo').hidden = true;
+  $('#fAtivo').setAttribute('aria-expanded', 'false');
+  $<HTMLInputElement>('#fQtd').focus();
+}
+// Escolher na lista sem tirar o foco do campo (evita fechar a lista antes do toque valer).
+document.addEventListener('pointerdown', e => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-sug]');
+  if (b) { e.preventDefault(); escolherSugestao(Number(b.dataset.sug)); }
+});
 
 /* ---------- eventos ---------- */
 document.addEventListener('click', async e => {
@@ -253,8 +292,13 @@ document.addEventListener('change', async e => {
 document.addEventListener('input', e => {
   const el = e.target as HTMLInputElement;
   if (el.id === 'filtro') { setFiltro(el.value); renderLancs(); }
+  else if (el.id === 'fAtivo') mostrarSugestoes();
 });
-document.addEventListener('focusout', e => { if ((e.target as HTMLElement).id === 'fAtivo') guessFormClass(); });
+document.addEventListener('focusout', e => {
+  if ((e.target as HTMLElement).id !== 'fAtivo') return;
+  setTimeout(() => { $('#sugAtivo').hidden = true; $('#fAtivo').setAttribute('aria-expanded', 'false'); }, 150);
+  guessFormClass();
+});
 
 async function exportBackup() {
   const b = buildBackup(state.lancs, state.precos);

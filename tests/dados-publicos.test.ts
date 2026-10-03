@@ -20,6 +20,7 @@ describe('COTAHIST', () => {
     expect(r.p.MXRF11[9]).toBe(9.09);
     expect(r.k).toEqual({ PETR4: 'a', MXRF11: 'f', BOVA11: 'o' });
     expect(r.ultimo).toBe('2026-10-01');
+    expect(r.n.MXRF11).toBe('FII MAXI REN');
   });
 });
 

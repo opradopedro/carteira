@@ -27,7 +27,8 @@ function montar(el: HTMLElement) {
       <div class="field"><label for="fTipo">Tipo</label>
         <select id="fTipo"><option value="C">Compra</option><option value="V">Venda</option><option value="P">Provento recebido</option></select></div>
       <div class="field"><label for="fData">Data</label><input type="date" id="fData" required></div>
-      <div class="field"><label for="fAtivo">Ativo</label><input id="fAtivo" placeholder="PETR4, BTC, Tesouro IPCA+ 2029" autocapitalize="characters" required></div>
+      <div class="field busca"><label for="fAtivo">Ativo</label><input id="fAtivo" placeholder="PETR4, Bitcoin, Tesouro IPCA+" autocapitalize="characters" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-controls="sugAtivo" aria-expanded="false" required>
+        <div class="sug" id="sugAtivo" role="listbox" hidden></div></div>
       <div class="field"><label for="fClasse">Classe</label>
         <select id="fClasse"><option value="acao">Ações</option><option value="fii">FIIs</option><option value="cripto">Cripto</option><option value="tesouro">Tesouro Direto</option><option value="outro">Outros</option></select></div>
       <div class="field" id="wQtd"><label for="fQtd">Quantidade</label><input id="fQtd" inputmode="decimal" placeholder="100 ou 0,0125"></div>

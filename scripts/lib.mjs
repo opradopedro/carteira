@@ -18,6 +18,7 @@ export function createCotahistAccumulator(year) {
   const p = {};      // ticker -> array(12) de fechamentos
   const lastDay = {}; // ticker -> array(12) com o dia do fechamento guardado
   const k = {};      // ticker -> classe ('a' ação, 'f' FII/Fiagro, 'o' outros)
+  const n = {};      // ticker -> nome curto do pregão (ex.: "PETROBRAS"), para a busca do app
   let ultimo = '';
   return {
     add(line) {
@@ -38,14 +39,15 @@ export function createCotahistAccumulator(year) {
       let c = CLASSE_BDI[bdi];
       if (bdi === '14') c = /^FIAGRO/.test(nome) ? 'f' : 'o';
       if (c) k[ticker] = c;
+      if (nome) n[ticker] = nome.replace(/\s+/g, ' ');
       const iso = `${data.slice(0, 4)}-${data.slice(4, 6)}-${data.slice(6, 8)}`;
       if (iso > ultimo) ultimo = iso;
     },
     result() {
       const tickers = Object.keys(p).sort();
-      /** @type {{ y: number, ultimo: string, p: Record<string, (number|null)[]>, k: Record<string, string> }} */
-      const out = { y: year, ultimo, p: {}, k: {} };
-      for (const t of tickers) { out.p[t] = p[t]; if (k[t]) out.k[t] = k[t]; }
+      /** @type {{ y: number, ultimo: string, p: Record<string, (number|null)[]>, k: Record<string, string>, n: Record<string, string> }} */
+      const out = { y: year, ultimo, p: {}, k: {}, n: {} };
+      for (const t of tickers) { out.p[t] = p[t]; if (k[t]) out.k[t] = k[t]; if (n[t]) out.n[t] = n[t]; }
       return out;
     },
   };
