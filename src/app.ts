@@ -149,9 +149,16 @@ export async function addLanc(l: Lancamento) {
   else hist.load(state.lancs).then(() => { recompute(); onChange(); });
 }
 
+export async function addLancs(ls: Lancamento[]) {
+  for (const l of ls) await addLanc(l);
+}
+
+/** Exclui o lançamento (e o seu par, se for uma troca de cripto por cripto). */
 export async function removeLanc(id: string) {
-  state.lancs = state.lancs.filter(l => l.id !== id);
-  await db.deleteLanc(id);
+  const l = state.lancs.find(x => x.id === id);
+  const ids = new Set([id, ...(l?.par ? [l.par] : [])]);
+  state.lancs = state.lancs.filter(x => !ids.has(x.id));
+  for (const i of ids) await db.deleteLanc(i);
   recompute(); onChange();
 }
 

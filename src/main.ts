@@ -7,6 +7,7 @@ import { buildBackup, downloadJson, parseBackup } from './data/backup';
 import type { Classe, TipoLanc } from './core/types';
 import { cleanTicker, guessClass, newId, parseNum, today } from './core/util';
 import { CRIPTO_NOMES, buscarAtivos, type Sugestao } from './core/busca';
+import { ehCripto, montarLancamentos, type Moeda } from './core/moeda';
 import { CLASSES } from './core/types';
 import { $, brl, fmtD, fmtQuando, toast } from './ui/fmt';
 import { renderResumo } from './ui/resumo';
@@ -85,7 +86,22 @@ function openForm() {
 function syncForm() {
   const p = $<HTMLSelectElement>('#fTipo').value === 'P';
   $('#wQtd').hidden = p; $('#wPreco').hidden = p; $('#wValor').hidden = !p;
+  // "Pago em" só para cripto: dá para pagar em reais, dólar ou outra cripto.
+  const cripto = !p && $<HTMLSelectElement>('#fClasse').value === 'cripto';
+  const selM = $<HTMLSelectElement>('#fMoeda');
+  $('#wMoeda').hidden = !cripto;
+  if (!cripto) selM.value = 'BRL';
+  const a = cleanTicker($<HTMLInputElement>('#fAtivo').value);
+  for (const o of [...selM.options]) o.hidden = o.value === a; // não paga BTC com BTC
+  if (selM.value === a) selM.value = 'BRL';
+  const m = selM.value as Moeda;
+  $('#fPrecoLabel').textContent = m === 'BRL' ? 'Preço unitário (R$)' : m === 'USD' ? 'Preço unitário (US$)' : `Preço unitário (em ${m})`;
+  $('#wMoeda label').textContent = $<HTMLSelectElement>('#fTipo').value === 'V' ? 'Recebido em' : 'Pago em';
 }
+const moedaForm = () => ($('#wMoeda').hidden ? 'BRL' : $<HTMLSelectElement>('#fMoeda').value) as Moeda;
+const fmtMoeda = (m: Moeda, x: number) => m === 'BRL' ? brl.format(x) : m === 'USD'
+  ? 'US$ ' + new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x)
+  : new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 8 }).format(x) + ' ' + m;
 function guessFormClass() {
   const a = cleanTicker($<HTMLInputElement>('#fAtivo').value);
   if (!a) return;
@@ -100,19 +116,30 @@ async function submitForm(e: Event) {
   const err = !d ? 'Informe a data.' : !a ? 'Informe o ativo.' : d > today() ? 'A data não pode ser no futuro.'
     : t === 'P' ? (val > 0 ? '' : 'Informe o valor recebido.') : (q > 0 && p > 0 ? '' : 'Informe quantidade e preço maiores que zero.');
   if (err) { $('#formErr').textContent = err; $('#formErr').hidden = false; return; }
-  const l = t === 'P'
-    ? { id: newId(), d, t, a, c, q: 0, p: 0, v: val, o: 'manual' as const }
-    : { id: newId(), d, t, a, c, q, p, v: q * p, o: 'manual' as const };
+  const m = moedaForm();
+  let novos;
+  if (t === 'P') novos = [{ id: newId(), d, t, a, c, q: 0, p: 0, v: val, o: 'manual' as const }];
+  else {
+    let cambio = 1;
+    if (m !== 'BRL') {
+      const cb = await app.hist.cambioNoDia(m, d).catch(() => null);
+      if (!cb) { $('#formErr').textContent = `Não achei a cotação de ${m} em ${fmtD(d)}. Informe o preço em reais.`; $('#formErr').hidden = false; return; }
+      cambio = cb.taxa;
+    }
+    novos = montarLancamentos({ t: t as 'C' | 'V', d, a, c, q, moeda: m, pMoeda: p, cambio }, newId);
+  }
   for (const s of ['#fAtivo', '#fQtd', '#fPreco', '#fValor']) $<HTMLInputElement>(s).value = '';
   $('#fPrecoNota').hidden = true;
+  $<HTMLSelectElement>('#fMoeda').value = 'BRL'; syncForm();
   $('#formErr').hidden = true; $('#formPanel').hidden = true;
-  await app.addLanc(l);
-  toast('Lançamento salvo');
+  await app.addLancs(novos);
+  toast(novos.length > 1 ? `Troca salva: ${novos[0].a} e ${novos[1].a}` : 'Lançamento salvo');
   if (t !== 'P' && !state.precos[a] && navigator.onLine) app.refresh('novos');
 }
 
 /* ---------- preço do dia no lançamento manual ---------- */
 let buscaPreco = 0;
+let cambioAtual: { m: Moeda; taxa: number; d: string; fonte: string } | null = null;
 async function sugerirPreco() {
   const tipo = $<HTMLSelectElement>('#fTipo').value, d = $<HTMLInputElement>('#fData').value;
   const a = cleanTicker($<HTMLInputElement>('#fAtivo').value), c = $<HTMLSelectElement>('#fClasse').value as Classe;
@@ -120,19 +147,27 @@ async function sugerirPreco() {
   if (tipo === 'P' || !a || !d) { atualizarTotal(); return; }
   const id = ++buscaPreco;
   nota.hidden = false; nota.textContent = 'Buscando o preço do dia…';
-  const r = await app.hist.precoNoDia(a, c, d, tipo === 'V').catch(() => null);
+  const m = moedaForm();
+  const [rBrl, cb] = await Promise.all([
+    app.hist.precoNoDia(a, c, d, tipo === 'V').catch(() => null),
+    m === 'BRL' ? Promise.resolve({ taxa: 1, d, fonte: '' }) : app.hist.cambioNoDia(m, d).catch(() => null),
+  ]);
   if (id !== buscaPreco) return; // o usuário mudou algo enquanto buscava
+  cambioAtual = cb ? { m, taxa: cb.taxa, d: cb.d, fonte: cb.fonte } : null;
+  const r = rBrl && cb ? { ...rBrl, p: rBrl.p / cb.taxa } : null;
   // Decide só agora: se o usuário digitou um preço enquanto buscava, ele é mantido.
   const pode = !inp.value || inp.dataset.auto === '1';
   if (!r) {
-    nota.textContent = 'Não achei o preço desse dia para esse ativo. Informe o preço que você pagou.';
+    nota.textContent = !cb ? `Não achei a cotação de ${m} nesse dia. Escolha outra moeda ou informe em reais.` : 'Não achei o preço desse dia para esse ativo. Informe o preço que você pagou.';
   } else {
     if (pode) {
-      inp.value = String(Math.round(r.p * 100) / 100 === r.p ? r.p.toFixed(2) : r.p).replace('.', ',');
+      const casas = m === 'BRL' || m === 'USD' ? 2 : 8;
+      inp.value = String(Number(r.p.toFixed(casas))).replace('.', ',');
       inp.dataset.auto = '1';
     }
     const outroDia = r.d !== d ? ` (último dia com negociação antes de ${fmtD(d)})` : '';
-    nota.textContent = `${pode ? 'Preenchido com' : 'Referência:'} ${brl.format(r.p)} — ${r.fonte} em ${fmtD(r.d)}${outroDia}. Se pagou outro preço, é só trocar.`;
+    const conv = m === 'BRL' ? '' : ` = ${brl.format(rBrl!.p)} ÷ ${brl.format(cb!.taxa)} por ${m} (${cb!.fonte})`;
+    nota.textContent = `${pode ? 'Preenchido com' : 'Referência:'} ${fmtMoeda(m, r.p)} — ${r.fonte} em ${fmtD(r.d)}${outroDia}${conv}. Se pagou outro preço, é só trocar.`;
   }
   atualizarTotal();
 }
@@ -141,7 +176,10 @@ function atualizarTotal() {
   const nota = $('#fPrecoNota');
   nota.querySelector('.total')?.remove();
   if (q > 0 && p > 0 && $<HTMLSelectElement>('#fTipo').value !== 'P') {
-    const t = document.createElement('b'); t.className = 'total'; t.textContent = ` Total da operação: ${brl.format(q * p)}.`;
+    const m = moedaForm();
+    const emReais = m === 'BRL' ? '' : cambioAtual && cambioAtual.m === m ? ` ≈ ${brl.format(q * p * cambioAtual.taxa)}` : '';
+    const troca = ehCripto(m) ? ` Também será lançada a ${$<HTMLSelectElement>('#fTipo').value === 'C' ? 'venda' : 'compra'} de ${fmtMoeda(m, q * p)}.` : '';
+    const t = document.createElement('b'); t.className = 'total'; t.textContent = ` Total da operação: ${fmtMoeda(m, q * p)}${emReais}.${troca}`;
     nota.hidden = false; nota.appendChild(t);
   }
 }
@@ -175,6 +213,7 @@ function escolherSugestao(i: number) {
   $('#sugAtivo').hidden = true;
   $('#fAtivo').setAttribute('aria-expanded', 'false');
   $<HTMLInputElement>('#fQtd').focus();
+  syncForm();
   sugerirPreco();
 }
 // Escolher na lista sem tirar o foco do campo (evita fechar a lista antes do toque valer).
@@ -324,7 +363,8 @@ document.addEventListener('submit', async e => {
 document.addEventListener('change', async e => {
   const el = e.target as HTMLInputElement;
   if (el.id === 'fTipo') { syncForm(); sugerirPreco(); }
-  else if (el.id === 'fData' || el.id === 'fClasse') sugerirPreco();
+  else if (el.id === 'fData') sugerirPreco();
+  else if (el.id === 'fClasse' || el.id === 'fMoeda') { syncForm(); sugerirPreco(); }
   else if (el.id === 'eTipo') syncEdit();
   else if (el.id === 'ordemLanc') {
     state.ordemLanc = el.value as typeof state.ordemLanc;
@@ -382,6 +422,7 @@ document.addEventListener('focusout', e => {
     $('#sugAtivo').hidden = true; $('#fAtivo').setAttribute('aria-expanded', 'false');
   }, 150);
   guessFormClass();
+  syncForm();
   sugerirPreco();
 });
 

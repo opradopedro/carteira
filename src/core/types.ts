@@ -20,6 +20,10 @@ export interface Lancamento {
   o: 'b3' | 'manual';
   n?: string;       // descrição (ex.: "Dividendo", "Desdobro")
   k0?: string;      // chave original da importação, mantida quando o lançamento é corrigido à mão
+  moeda?: string;   // moeda em que foi paga a operação (USD ou uma cripto); ausente = reais
+  pMoeda?: number;  // preço unitário nessa moeda
+  cambio?: number;  // reais por 1 unidade da moeda, no dia
+  par?: string;     // id do lançamento ligado (troca de cripto por cripto)
 }
 
 export interface Cotacao {

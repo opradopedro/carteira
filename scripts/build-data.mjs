@@ -19,6 +19,8 @@ import { tmpdir } from 'node:os';
 import { createCotahistAccumulator, parseMbCandles, parseMbDiario, parseTesouroCsv, tesouroDiario } from './lib.mjs';
 
 const START_YEAR = 2016;
+// Criptomoedas com histórico no Mercado Bitcoin (também servem de câmbio em trocas cripto x cripto).
+const CRIPTOS = ['BTC', 'ETH', 'SOL', 'USDT', 'USDC'];
 const START_MONTH = `${START_YEAR}-01`;
 const OUT = join(import.meta.dirname, '..', 'public', 'data');
 const repo = process.env.GITHUB_REPOSITORY || '';
@@ -137,14 +139,14 @@ async function cripto() {
     const from = Math.floor(Date.UTC(START_YEAR, 0, 1) / 1000);
     const to = Math.floor(Date.now() / 1000);
     const out = { m: [], p: {} };
-    for (const sym of ['BTC', 'ETH']) {
+    for (const sym of CRIPTOS) {
       const url = `https://api.mercadobitcoin.net/api/v4/candles?symbol=${sym}-BRL&resolution=1M&from=${from}&to=${to}`;
       const res = parseMbCandles(await (await fetchRetry(url, { timeout: 60_000 })).json(), START_MONTH, curMonth);
       out.m = res.m; out.p[sym] = res.p;
     }
     writeJson('cripto.json', out);
     const diario = {};
-    for (const sym of ['BTC', 'ETH']) {
+    for (const sym of CRIPTOS) {
       const url = `https://api.mercadobitcoin.net/api/v4/candles?symbol=${sym}-BRL&resolution=1d&from=${from}&to=${to}`;
       diario[sym] = parseMbDiario(await (await fetchRetry(url, { timeout: 60_000 })).json());
     }
@@ -170,6 +172,9 @@ async function bcb() {
     const selic = (await ipea('BM366_TJOVER366')).at(-1)?.[1] ?? null;
     if (cdi.length < 1000 || ipca.length < 60) throw new Error('séries incompletas');
     writeJson('bcb.json', { cdi, ipca, selic, em: now.toISOString(), fonte: 'Ipeadata' });
+    // Dólar comercial diário (R$ por US$), para compras de cripto pagas em dólar.
+    const usd = (await ipea('GM366_ERC366')).filter(([d]) => d >= desde);
+    writeJson('usd-d.json', { d: usd.map(x => x[0]), p: usd.map(x => x[1]) });
     console.log(`Índices: CDI até ${cdi.at(-1)[0]}, IPCA até ${ipca.at(-1)[0]}`);
   } catch (e) {
     problemas.push(`Índices (Ipeadata): ${e.message}`);

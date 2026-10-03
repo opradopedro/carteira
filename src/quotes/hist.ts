@@ -131,6 +131,21 @@ export class Historico {
     return null;
   }
 
+  /** Reais por 1 unidade da moeda no dia (dólar comercial ou fechamento da cripto no Mercado Bitcoin). */
+  async cambioNoDia(moeda: string, iso: string): Promise<{ taxa: number; d: string; fonte: string } | null> {
+    const serie = moeda === 'USD'
+      ? await getJson<{ d: string[]; p: number[] }>('usd-d.json')
+      : (await getJson<Record<string, { d: string[]; p: number[] }>>('cripto-d.json'))?.[moeda];
+    if (!serie) return null;
+    for (let i = serie.d.length - 1; i >= 0; i--) {
+      if (serie.d[i] <= iso) {
+        if (serie.d[i] < addDaysIso(iso, -7)) return null;
+        return { taxa: serie.p[i], d: serie.d[i], fonte: moeda === 'USD' ? 'dólar comercial (Banco Central)' : 'Mercado Bitcoin' };
+      }
+    }
+    return null;
+  }
+
   /** Carrega o que a busca de ativos precisa: o ano mais recente da B3 e os títulos do Tesouro. */
   async carregarBusca(): Promise<void> {
     this.meta ||= await getJson<Meta>('meta.json');

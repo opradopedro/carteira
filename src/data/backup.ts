@@ -30,7 +30,8 @@ export function parseBackup(text: string): Backup {
       typeof l.a === 'string' && CLASSES.includes(l.c) &&
       [l.q, l.p, l.v].every(n => typeof n === 'number' && Number.isFinite(n));
     if (!ok) throw new Error('O backup tem lançamentos com formato inválido.');
-    lancs.push({ id: l.id, d: l.d, t: l.t, a: l.a, c: l.c, q: l.q, p: l.p, v: l.v, o: l.o === 'b3' ? 'b3' : 'manual', ...(l.n ? { n: String(l.n) } : {}), ...(l.k0 ? { k0: String(l.k0) } : {}) });
+    lancs.push({ id: l.id, d: l.d, t: l.t, a: l.a, c: l.c, q: l.q, p: l.p, v: l.v, o: l.o === 'b3' ? 'b3' : 'manual', ...(l.n ? { n: String(l.n) } : {}), ...(l.k0 ? { k0: String(l.k0) } : {}),
+      ...(l.moeda ? { moeda: String(l.moeda), pMoeda: Number(l.pMoeda), cambio: Number(l.cambio) } : {}), ...(l.par ? { par: String(l.par) } : {}) });
   }
   return { app: 'carteira', versao: 1, exportadoEm: String(b.exportadoEm || ''), lancs, precosManuais: b.precosManuais || {} };
 }

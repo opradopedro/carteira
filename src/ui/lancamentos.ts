@@ -1,6 +1,7 @@
 import { model, state } from '../app';
 import type { Lancamento, TipoLanc } from '../core/types';
 import { $, brl, esc, fmtD, fmtQ } from './fmt';
+import { MOEDAS, NOME_MOEDA } from '../core/moeda';
 
 const TIPO: Record<TipoLanc, string> = { C: 'Compra', V: 'Venda', P: 'Provento', S: 'Ajuste' };
 const COR: Record<TipoLanc, string> = { C: 'accent', V: 'loss', P: 'gain', S: 'muted' };
@@ -31,8 +32,10 @@ function montar(el: HTMLElement) {
         <div class="sug" id="sugAtivo" role="listbox" hidden></div></div>
       <div class="field"><label for="fClasse">Classe</label>
         <select id="fClasse"><option value="acao">Ações</option><option value="fii">FIIs</option><option value="cripto">Cripto</option><option value="tesouro">Tesouro Direto</option><option value="outro">Outros</option></select></div>
+      <div class="field full" id="wMoeda" hidden><label for="fMoeda">Pago em</label>
+        <select id="fMoeda">${MOEDAS.map(m => `<option value="${m}">${NOME_MOEDA[m]}</option>`).join('')}</select></div>
       <div class="field" id="wQtd"><label for="fQtd">Quantidade</label><input id="fQtd" inputmode="decimal" placeholder="100 ou 0,0125"></div>
-      <div class="field" id="wPreco"><label for="fPreco">Preço unitário (R$)</label><input id="fPreco" inputmode="decimal" placeholder="38,20"></div>
+      <div class="field" id="wPreco"><label for="fPreco" id="fPrecoLabel">Preço unitário (R$)</label><input id="fPreco" inputmode="decimal" placeholder="38,20"></div>
       <div class="note full" id="fPrecoNota" hidden></div>
       <div class="field full" id="wValor" hidden><label for="fValor">Valor recebido (R$)</label><input id="fValor" inputmode="decimal" placeholder="125,40"></div>
       <div class="row full">
@@ -78,7 +81,7 @@ export function renderLancs() {
 /** Linha de lançamento que abre a tela de edição. */
 export function itemLanc(l: Lancamento, mostrarAtivo = true) {
   return `<button type="button" class="item" data-page="lanc:${esc(l.id)}">
-    <div class="name">${mostrarAtivo ? esc(l.a) + ' ' : ''}<span class="tag" style="color:var(--${COR[l.t]})">${l.n && l.t !== 'C' ? esc(l.n) : TIPO[l.t]}</span></div>
+    <div class="name">${mostrarAtivo ? esc(l.a) + ' ' : ''}<span class="tag" style="color:var(--${COR[l.t]})">${l.n && (l.t !== 'C' || l.moeda) ? esc(l.n) : TIPO[l.t]}</span></div>
     <div class="val">${l.t === 'S' ? (l.q > 0 ? '+' : '') + fmtQ(l.q) : brl.format(l.v)} ›</div>
     <div class="meta">${fmtD(l.d)}${l.t === 'C' || l.t === 'V' ? ' · ' + fmtQ(l.q) + ' × ' + brl.format(l.p) : ''}${l.o === 'b3' ? ' · B3' : ''}</div><div class="meta r"></div></button>`;
 }

@@ -329,10 +329,14 @@ function paginaLanc(el: HTMLElement, id: string) {
   const l = state.lancs.find(x => x.id === id);
   if (!l) { el.innerHTML = '<div class="panel"><div class="empty">Lançamento não encontrado (talvez já tenha sido excluído).</div></div>'; return; }
   const num = (x: number) => (x ? String(x).replace('.', ',') : '');
+  const par = l.par ? state.lancs.find(x => x.id === l.par) : undefined;
   const ehP = l.t === 'P', ehS = l.t === 'S';
   el.innerHTML = `
   <div class="panel">
     <div class="sub">${l.o === 'b3' ? 'Lançamento importado da B3. Se você corrigir aqui e importar a planilha de novo, a correção é mantida e nada duplica.' : 'Lançamento feito à mão.'}</div>
+    ${l.moeda ? `<div class="note">Feito em ${esc(l.moeda)}: ${fmtQ(l.pMoeda ?? 0)} ${esc(l.moeda)} por unidade, com 1 ${esc(l.moeda)} = ${brl.format(l.cambio ?? 0)} no dia. Aqui os valores aparecem já convertidos para reais.</div>` : ''}
+    ${par ? `<div class="note">Faz parte de uma troca com <b>${esc(par.a)}</b> (${par.t === 'C' ? 'compra' : 'venda'} de ${fmtQ(par.q)} ${esc(par.a)}). Se corrigir aqui, confira também o outro lançamento. Excluir apaga os dois.</div>
+      <div class="row"><button type="button" class="btn small" data-page="lanc:${esc(par.id)}">Abrir o lançamento de ${esc(par.a)} ›</button></div>` : ''}
     <form id="formEdit" data-id="${esc(l.id)}" autocomplete="off">
       <div class="field"><label for="eTipo">Tipo</label>
         <select id="eTipo">${ehS ? '<option value="S" selected>Ajuste (desdobro, bonificação…)</option>' : ''}
@@ -354,7 +358,7 @@ function paginaLanc(el: HTMLElement, id: string) {
   </div>
   <div class="panel">
     <h2>Excluir</h2>
-    <div class="sub">Remove este lançamento da carteira. Se ele veio da B3 e você importar a planilha de novo, ele volta.</div>
+    <div class="sub">Remove este lançamento da carteira${par ? ` (e o de ${esc(par.a)}, da mesma troca)` : ''}. Se ele veio da B3 e você importar a planilha de novo, ele volta.</div>
     <div class="row"><button type="button" class="btn danger" data-del-lanc="${esc(l.id)}">Excluir lançamento</button></div>
   </div>`;
 }
