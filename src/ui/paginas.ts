@@ -1,6 +1,6 @@
 // Páginas de detalhe abertas a partir dos cards e listas.
 import { hist, listaPendencias, model, serie, serieDe, state } from '../app';
-import { comparar, periodRange, proventosPorMes, IBOV_PROXY } from '../core/analise';
+import { comparar, janela, lerPonto, periodRange, proventosPorMes, IBOV_PROXY } from '../core/analise';
 import { cdiAcumulado, periodResult } from '../core/perf';
 import { CLASSES, type Classe, type Cotacao, type Posicao } from '../core/types';
 import { addMonths, monthEnd, today } from '../core/util';
@@ -155,7 +155,7 @@ function paginaEvo(el: HTMLElement) {
     <div><span class="label">Ganho</span><b class="${sign(r.ganho)}">${brl.format(r.ganho)}</b></div>
     <div><span class="label">Rentabilidade</span><b class="${sign(r.rent)}">${fmtPct(r.rent)}</b></div>
   </div></div>` : ''}`;
-  graficoPatrimonio($('#chEvoP'), recorte.length ? recorte : serie, 'Patrimônio', { inicio: 'Desde o início' });
+  graficoPatrimonio($('#chEvoP'), serie, 'Patrimônio', { desde: recorte.length ? recorte[0].ym : undefined });
 }
 
 /* ---------- Classe ---------- */
@@ -192,7 +192,7 @@ function paginaClasse(el: HTMLElement, c: Classe) {
   ${encerrados.length ? `<div class="panel"><h2>Encerrados</h2><div class="list">${encerrados.map(itemAtivo).join('')}</div></div>` : ''}
   <div class="row"><button type="button" class="btn" data-page="prov:c:${c}">Ver proventos de ${CLASSES[c]} ›</button></div>`;
   if (comp) graficoRent($('#chClsR'), comp, s, CLASSES[c]);
-  if (cur) graficoPatrimonio($('#chClsE'), s, CLASSES[c], { inicio: 'Desde o início' });
+  if (cur) graficoPatrimonio($('#chClsE'), s, CLASSES[c]);
 }
 
 export function itemAtivo(p: Posicao) {
@@ -219,50 +219,66 @@ function paginaAtivo(el: HTMLElement, a: string) {
   const p = model.list.find(x => x.a === a);
   if (!p) { el.innerHTML = '<div class="panel"><div class="empty">Ativo não encontrado.</div></div>'; return; }
   const s = serieDe('ativo:' + a, l => l.a === a, p.q > 0 ? p.value : 0);
-  const last = s.length ? s.length - 1 : -1;
-  const pct = p.cost ? p.res / p.cost : 0;
   const lancs = model.sorted.filter(l => l.a === a).slice().reverse();
-  const ultimo = (() => {
-    if (last < 0) return null;
-    let acc = 1, acc12 = 1;
-    const lim = addMonths(s[last].ym, -12);
-    for (const q of s) { acc *= 1 + q.r; if (q.ym > lim) acc12 *= 1 + q.r; }
-    return { desde: acc - 1, r12: acc12 - 1, mes: s[last].r };
-  })();
+  const tudo = s.length ? lerPonto(s, s.length - 1) : null;
+  const cur = s.at(-1)?.ym;
+  const per = state.per.ativo;
+  const [ini, fim] = cur ? periodRange(per, s[0].ym, cur) : ['', ''];
+  const iIni = s.findIndex(q => q.ym >= ini), iFim = s.findLastIndex(q => q.ym <= fim);
+  const jan = cur && iIni >= 0 && iFim >= iIni ? janela(s, iIni, iFim) : null;
+  const ix = state.indices;
+  const dIni = monthEnd(addMonths(ini, -1)), dFim = iFim >= 0 ? s[iFim].d : '';
+  const cdiPer = jan && ix?.cdi?.length && ix.cdi[0][0] <= dIni ? cdiAcumulado(ix.cdi, dIni, dFim) : null;
+  const pct = p.cost ? p.res / p.cost : 0;
+  const ed = state.editando === a;
+  const dis = ed ? '' : 'disabled';
   el.innerHTML = `
   <div class="panel">
     <span class="label"><span class="dot" style="background:var(--c-${p.c})"></span> ${CLASSES[p.c]}</span>
     <div class="big">${brl.format(p.value)}</div>
-    ${p.q > 0 ? `<div class="delta ${sign(p.res)}">${arrow(p.res)} ${brl.format(Math.abs(p.res))} (${fmtPct(pct)}) sobre o investido</div>` : `<div class="sub">${p.q < 0 ? 'Posição vendida (veja Pendências)' : 'Posição encerrada'}</div>`}
+    ${p.q > 0 ? `<div class="delta ${sign(p.res)}">${arrow(p.res)} ${brl.format(Math.abs(p.res))} (${fmtPct(pct)}) sobre o custo atual</div>` : `<div class="sub">${p.q < 0 ? 'Posição vendida (veja Pendências)' : 'Posição encerrada'}</div>`}
+    ${tudo ? `<div class="destaque">
+      <span class="label">Resultado total desde a primeira compra</span>
+      <div class="row between"><b class="${sign(tudo.resultado)}">${brl.format(tudo.resultado)}</b><b class="${sign(tudo.resultado)}">${fmtPct(tudo.pctTotal)}</b></div>
+      <div class="sub">Total comprado ${brl.format(tudo.comprado)}${tudo.vendido ? ` · vendas ${brl.format(tudo.vendido)}` : ''}${tudo.proventos ? ` · proventos ${brl.format(tudo.proventos)}` : ''}</div>
+    </div>` : ''}
     <div class="stats adapt">
       <div><span class="label">Quantidade</span><b>${fmtQ(p.q)}</b></div>
       <div><span class="label">Preço atual</span><b>${p.px ? brl.format(p.px.p) : '—'}</b></div>
       <div><span class="label">Preço médio</span><b>${brl.format(p.pm)}</b></div>
-      <div><span class="label">Investido</span><b>${brl.format(p.cost)}</b></div>
+      <div><span class="label">Custo atual</span><b>${brl.format(p.cost)}</b></div>
       <div><span class="label">Lucro em vendas</span><b class="${sign(p.real)}">${brl.format(p.real)}</b></div>
-      <div><span class="label">Proventos (total)</span><b>${brl.format(p.prov)}</b></div>
+      <div><span class="label">Proventos</span><b>${brl.format(p.prov)}</b></div>
     </div>
     ${p.q > 0 ? `<div class="note">${esc(fonteTxt(p.px))}</div>` : ''}
   </div>
-  ${ultimo ? `<div class="panel">
-    <h2>Rendimento</h2>
-    <div class="stats">
-      <div><span class="label">Desde a compra</span><b class="lg ${sign(ultimo.desde)}">${fmtPct(ultimo.desde)}</b></div>
-      <div><span class="label">12 meses</span><b class="lg ${sign(ultimo.r12)}">${fmtPct(ultimo.r12)}</b></div>
-      <div><span class="label">No mês</span><b class="lg ${sign(ultimo.mes)}">${fmtPct(ultimo.mes)}</b></div>
-    </div>
+  ${cur ? `<div class="panel">
+    <h2>Desempenho</h2>
+    ${segPeriodo('ativo', per, ['12m', 'ano', 'tudo', 'y', 'custom'], s[0].ym, cur, ini, fim, anosDisponiveis(s[0].ym, cur))}
+    ${jan ? `<div class="stats">
+      <div><span class="label">Ganho no período</span><b class="${sign(jan.ganho)}">${brl.format(jan.ganho)}</b></div>
+      <div><span class="label">Rendimento</span><b class="lg ${sign(jan.ganho)}">${fmtPct(jan.pct)}</b></div>
+      <div><span class="label">CDI</span><b class="lg">${pctOu(cdiPer)}</b></div>
+    </div>` : ''}
     <div class="chart" id="chAtivo"></div>
-    <div class="legend"><span><i style="background:var(--accent)"></i>Valor da posição</span><span><i style="background:var(--muted)"></i>Investido</span></div>
-    <div class="note">Rendimento inclui proventos. Toque ou arraste no gráfico para ver cada mês desde a compra.</div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>Valor da posição</span><span><i style="background:var(--muted)"></i>Investido (custo do que você tem)</span></div>
+    <details class="como"><summary>Como é calculado</summary>
+      <p><b>Resultado total</b> = valor de hoje + o que recebeu em vendas + proventos − tudo o que comprou. A % é sobre o total comprado.</p>
+      <p><b>Ganho no período</b> = valor no fim − valor no início − compras + vendas + proventos do período. A % é sobre o que estava aplicado: valor no início + compras do período.</p>
+      <p>Toque ou arraste no gráfico para ver esses números em cada mês. Ao rolar a página por cima do gráfico, nada abre.</p>
+    </details>
   </div>` : ''}
   <div class="panel">
-    <h2>Ajustes do ativo</h2>
-    <div class="form">
-      <div class="field"><label for="cls">Classe</label><select id="cls" data-cls="${esc(a)}">${Object.entries(CLASSES).map(([k, v]) => `<option value="${k}" ${k === p.c ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-      ${p.q > 0 ? `<div class="field"><label for="px">Preço manual (R$)</label><input id="px" inputmode="decimal" placeholder="opcional" value="${p.px?.fonte === 'manual' ? String(p.px.p).replace('.', ',') : ''}"></div>` : ''}
+    <div class="row between"><h2>Ajustes do ativo</h2>
+      ${ed ? '' : `<button type="button" class="btn small" data-editar="${esc(a)}">Editar</button>`}</div>
+    <div class="form ${ed ? '' : 'travado'}">
+      <div class="field"><label for="cls">Classe</label><select id="cls" data-cls="${esc(a)}" ${dis}>${Object.entries(CLASSES).map(([k, v]) => `<option value="${k}" ${k === p.c ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      ${p.q > 0 ? `<div class="field"><label for="px">Preço manual (R$)</label><input id="px" inputmode="decimal" placeholder="opcional" ${dis} value="${p.px?.fonte === 'manual' ? String(p.px.p).replace('.', ',') : ''}"></div>` : ''}
     </div>
-    ${p.q > 0 ? `<div class="row"><button type="button" class="btn small" data-savepx="${esc(a)}">Salvar preço manual</button>
-      ${p.px?.fonte === 'manual' ? `<button type="button" class="btn small" data-autopx="${esc(a)}">Voltar à cotação automática</button>` : ''}</div>` : ''}
+    ${ed ? `<div class="row">
+      ${p.q > 0 ? `<button type="button" class="btn primary small" data-savepx="${esc(a)}">Salvar preço manual</button>` : ''}
+      ${p.px?.fonte === 'manual' ? `<button type="button" class="btn small" data-autopx="${esc(a)}">Voltar à cotação automática</button>` : ''}
+      <button type="button" class="btn small" data-editar="">Concluir</button></div>` : '<div class="note">Toque em Editar para mudar a classe ou informar um preço.</div>'}
   </div>
   ${p.prov > 0 ? `<div class="row"><button type="button" class="btn" data-page="prov:a:${esc(a)}">Ver proventos de ${esc(a)} ›</button></div>` : ''}
   <div class="panel"><h2>Lançamentos</h2><div class="list">${lancs.slice(0, 60).map(l => `<div class="item">
@@ -270,7 +286,8 @@ function paginaAtivo(el: HTMLElement, a: string) {
     <div class="val">${l.t === 'S' ? (l.q > 0 ? '+' : '') + fmtQ(l.q) : brl.format(l.v)}</div>
     <div class="meta">${fmtD(l.d)}${l.t === 'C' || l.t === 'V' ? ' · ' + fmtQ(l.q) + ' × ' + brl.format(l.p) : ''}</div><div class="meta r"></div></div>`).join('')}
     ${lancs.length > 60 ? `<div class="empty">Mostrando os 60 mais recentes de ${lancs.length}.</div>` : ''}</div></div>`;
-  if (ultimo) graficoPatrimonio($('#chAtivo'), s, a, {
+  if (cur) graficoPatrimonio($('#chAtivo'), s, a, {
+    desde: per.tipo === 'tudo' ? undefined : addMonths(ini, -1),
     extra: q => {
       const px = hist.priceAt(a, p.c, q.ym);
       return px ? `<div class="sub">Preço no fim do mês: ${brl.format(px)}</div>` : '';

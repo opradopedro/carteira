@@ -11,6 +11,8 @@ export interface PontoMes {
   v: number;          // patrimônio a preço de mercado
   custo: number;      // custo das posições abertas (valor investido)
   fluxo: number;      // aportes - retiradas (compras - vendas) no mês
+  compras: number;    // valor comprado no mês
+  vendas: number;     // valor recebido em vendas no mês
   prov: number;       // proventos recebidos no mês
   r: number;          // rentabilidade do mês (Dietz modificado, com proventos)
   semPreco: string[]; // ativos avaliados pelo custo por falta de cotação
@@ -38,7 +40,7 @@ export function monthlySeries(
   for (let ym = sorted[0].d.slice(0, 7); ym <= curYm; ym = addMonths(ym, 1)) {
     const fim = ym === curYm ? hoje : monthEnd(ym);
     const dias = dayOf(fim);
-    let fluxo = 0, prov = 0, pesado = 0;
+    let fluxo = 0, prov = 0, pesado = 0, compras = 0, vendas = 0;
     while (i < sorted.length && sorted[i].d <= fim) {
       const l = sorted[i++];
       const p = pos[l.a] || (pos[l.a] = { q: 0, cost: 0, c: l.c });
@@ -49,6 +51,7 @@ export function monthlySeries(
       // Venda sem valor informado (vencimento de CDB) sai pelo custo, como no cálculo da posição.
       const f = l.t === 'C' ? l.v : l.t === 'V' ? -(l.v || custoAntes - p.cost) : 0;
       fluxo += f;
+      if (f > 0) compras += f; else vendas -= f;
       pesado += f * (dias - dayOf(l.d)) / dias; // aporte no fim do dia conta pelos dias restantes
     }
     let v = 0, custo = 0;
@@ -63,7 +66,7 @@ export function monthlySeries(
     if (ym === curYm && atual) v = atual.v;
     const base = prevV + pesado;
     const r = base > 1e-6 ? (v - prevV - fluxo + prov) / base : 0;
-    out.push({ ym, d: fim, v, custo, fluxo, prov, r, semPreco });
+    out.push({ ym, d: fim, v, custo, fluxo, compras, vendas, prov, r, semPreco });
     prevV = v;
   }
   return out;

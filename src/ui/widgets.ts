@@ -50,42 +50,51 @@ export const legendaComparacao = (rotulo = 'Carteira') => `<div class="legend">
   <span><i style="background:var(--b-ibov)"></i>Ibovespa</span><span><i style="background:var(--b-ipca)"></i>IPCA</span></div>`;
 
 /** HTML do painel ao tocar num ponto de uma série de patrimônio. */
-export interface OpcoesPainel { extra?: (p: PontoMes) => string; inicio?: string }
+export interface OpcoesPainel { extra?: (p: PontoMes) => string; /** mostrar só a partir deste mês (os cálculos usam a série inteira) */ desde?: string }
 
 export function painelPonto(serie: PontoMes[], x: number, titulo: string, o: OpcoesPainel = {}) {
   const i = pontoMaisProximo(serie, x);
   const L = lerPonto(serie, i);
   const hoje = i === serie.length - 1 && serie[i].d.slice(0, 7) === new Date().toISOString().slice(0, 7);
   const ix = state.indices;
-  let cdi = '';
-  if (ix?.cdi?.length) {
-    const d0 = monthEnd(addMonths(serie[0].ym, -1));
-    const d12 = monthEnd(addMonths(L.ym, -L.meses12));
-    const dm = monthEnd(addMonths(L.ym, -1));
-    if (ix.cdi[0][0] <= d0) {
-      cdi = `<div class="sheet-cdi">CDI no mesmo período: ${fmtPct(cdiAcumulado(ix.cdi, d0, L.d))} · ${fmtPct(cdiAcumulado(ix.cdi, d12, L.d))} · ${fmtPct(cdiAcumulado(ix.cdi, dm, L.d))}</div>`;
-    }
-  }
+  const cdiDe = (meses: number) => {
+    const d0 = monthEnd(addMonths(L.ym, -meses));
+    return ix?.cdi?.length && ix.cdi[0][0] <= d0 ? cdiAcumulado(ix.cdi, d0, L.d) : null;
+  };
+  const rotulo12 = L.doze.meses >= 12 ? '12 meses' : `${L.doze.meses} ${L.doze.meses === 1 ? 'mês' : 'meses'}`;
+  const bloco = (rot: string, g: number, pct: number, cdi: number | null) => `<div>
+      <span class="label">${rot}</span><b class="${sign(g)}">${fmtPct(pct)}</b>
+      <span class="mini ${sign(g)}">${brl.format(g)}</span>${cdi != null ? `<span class="mini">CDI ${fmtPct(cdi)}</span>` : ''}</div>`;
   return `<div class="sheet-title">${esc(titulo)} · ${fmtD(L.d)}${hoje ? ' (hoje)' : ' (fechamento do mês)'}</div>
     <div class="sheet-big">${brl.format(L.v)}</div>
-    <div class="sub">Investido: ${brl.format(L.custo)}${L.custo ? ` · resultado ${brl.format(L.v - L.custo)}` : ''}</div>
     ${o.extra ? o.extra(serie[i]) : ''}
+    <div class="sheet-linhas">
+      <div><span>Total comprado</span><b>${brl.format(L.comprado)}</b></div>
+      ${L.vendido ? `<div><span>Recebido em vendas</span><b>${brl.format(L.vendido)}</b></div>` : ''}
+      ${L.proventos ? `<div><span>Proventos recebidos</span><b>${brl.format(L.proventos)}</b></div>` : ''}
+      <div><span>Resultado total</span><b class="${sign(L.resultado)}">${brl.format(L.resultado)} (${fmtPct(L.pctTotal)})</b></div>
+    </div>
     <div class="stats">
-      <div><span class="label">${o.inicio ?? 'Desde a compra'}</span><b class="${sign(L.desdeInicio)}">${fmtPct(L.desdeInicio)}</b></div>
-      <div><span class="label">${L.meses12 >= 12 ? '12 meses' : `${L.meses12} ${L.meses12 === 1 ? 'mês' : 'meses'}`}</span><b class="${sign(L.r12)}">${fmtPct(L.r12)}</b></div>
-      <div><span class="label">No mês</span><b class="${sign(L.rMes)}">${fmtPct(L.rMes)}</b></div>
-    </div>${cdi}`;
+      ${bloco(rotulo12, L.doze.ganho, L.doze.pct, cdiDe(L.doze.meses))}
+      ${bloco('No mês', L.mes.ganho, L.mes.pct, cdiDe(1))}
+    </div>
+    <details class="como"><summary>Como é calculado</summary>
+      <p><b>Resultado total</b> = valor em ${fmtD(L.d)} + o que recebeu em vendas + proventos − tudo o que comprou. A % é esse resultado dividido pelo total comprado.</p>
+      <p><b>${rotulo12} e no mês</b>: ganho = valor no fim − valor no início − compras + vendas + proventos do período, dividido pelo que estava aplicado (valor no início + compras do período).</p>
+      <p>A linha tracejada do gráfico é o custo do que você ainda tem (preço médio × quantidade).</p>
+    </details>`;
 }
 
 /** Gráfico de patrimônio x investido com painel ao tocar. */
 export function graficoPatrimonio(el: HTMLElement, serie: PontoMes[], titulo: string, o: OpcoesPainel = {}) {
   if (!serie.length) { el.innerHTML = `<div class="empty">${state.histPronto ? 'Sem histórico ainda.' : 'Carregando histórico…'}</div>`; return; }
+  const vis = o.desde ? serie.filter(p => p.ym >= o.desde!) : serie;
   const series: ISerie[] = [
-    { pts: serie.map(p => ({ x: tms(p.d), y: p.custo })), color: 'var(--muted)', step: true, dash: true },
-    { pts: serie.map(p => ({ x: tms(p.d), y: p.v })), color: 'var(--accent)', fill: true },
+    { pts: vis.map(p => ({ x: tms(p.d), y: p.custo })), color: 'var(--muted)', step: true, dash: true },
+    { pts: vis.map(p => ({ x: tms(p.d), y: p.v })), color: 'var(--accent)', fill: true },
   ];
   interactiveChart(el, series, {
-    label: titulo, xs: serie.map(p => tms(p.d)),
+    label: titulo, xs: vis.map(p => tms(p.d)),
     inspect: x => painelPonto(serie, x, titulo, o),
   });
 }

@@ -69,22 +69,47 @@ export function comparar(serie: PontoMes[], ini: string, fim: string, ix: Indice
   return { r, cdi, ibov, ipca, curvas };
 }
 
+export interface Janela { ganho: number; base: number; pct: number; meses: number }
+
 export interface Leitura {
   ym: string; d: string; v: number; custo: number;
-  desdeInicio: number; r12: number; rMes: number;
-  meses12: number; // quantos meses entraram no "12 meses" (menos se a série é mais curta)
+  comprado: number;   // tudo o que foi comprado até a data
+  vendido: number;    // tudo o que foi recebido em vendas até a data
+  proventos: number;  // proventos recebidos até a data
+  resultado: number;  // valor + vendas + proventos - compras
+  pctTotal: number;   // resultado / total comprado
+  doze: Janela;       // últimos 12 meses até a data
+  mes: Janela;        // só o mês da data
 }
 
-/** O que mostrar ao tocar num ponto do gráfico: valor e rendimentos até aquela data. */
+/**
+ * Ganho numa janela de meses, em reais e em % do dinheiro que estava aplicado:
+ *   ganho = valor no fim - valor no início - compras + vendas + proventos
+ *   base  = valor no início + compras feitas na janela
+ */
+export function janela(serie: PontoMes[], de: number, ate: number): Janela {
+  const vIni = de > 0 ? serie[de - 1].v : 0;
+  let compras = 0, vendas = 0, prov = 0;
+  for (let k = de; k <= ate; k++) { compras += serie[k].compras; vendas += serie[k].vendas; prov += serie[k].prov; }
+  const ganho = serie[ate].v - vIni - compras + vendas + prov;
+  const base = vIni + compras;
+  return { ganho, base, pct: base > 1e-6 ? ganho / base : 0, meses: ate - de + 1 };
+}
+
+/** O que mostrar ao tocar num ponto do gráfico, calculado sobre o dinheiro aplicado. */
 export function lerPonto(serie: PontoMes[], i: number): Leitura {
   const p = serie[i];
-  let acc = 1, acc12 = 1, meses12 = 0;
+  let comprado = 0, vendido = 0, proventos = 0;
+  for (let k = 0; k <= i; k++) { comprado += serie[k].compras; vendido += serie[k].vendas; proventos += serie[k].prov; }
+  const resultado = p.v + vendido + proventos - comprado;
   const lim = addMonths(p.ym, -12);
-  for (let k = 0; k <= i; k++) {
-    acc *= 1 + serie[k].r;
-    if (serie[k].ym > lim) { acc12 *= 1 + serie[k].r; meses12++; }
-  }
-  return { ym: p.ym, d: p.d, v: p.v, custo: p.custo, desdeInicio: acc - 1, r12: acc12 - 1, rMes: p.r, meses12 };
+  let de12 = i;
+  while (de12 > 0 && serie[de12 - 1].ym > lim) de12--;
+  return {
+    ym: p.ym, d: p.d, v: p.v, custo: p.custo, comprado, vendido, proventos, resultado,
+    pctTotal: comprado > 1e-6 ? resultado / comprado : 0,
+    doze: janela(serie, de12, i), mes: janela(serie, i, i),
+  };
 }
 
 /** Índice do ponto da série mais próximo de uma data (ms). */

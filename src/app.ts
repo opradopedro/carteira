@@ -21,7 +21,9 @@ export const state = {
   cfg: {} as Config,
   cotEm: '',
   /** Período escolhido em cada página de detalhe. */
-  per: { rent: { tipo: '12m' }, evo: { tipo: 'tudo' }, prov: { tipo: '12m' }, classe: { tipo: '12m' } } as Record<'rent' | 'evo' | 'prov' | 'classe', Periodo>,
+  per: { rent: { tipo: '12m' }, evo: { tipo: 'tudo' }, prov: { tipo: '12m' }, classe: { tipo: '12m' }, ativo: { tipo: 'tudo' } } as Record<'rent' | 'evo' | 'prov' | 'classe' | 'ativo', Periodo>,
+  /** Ativo cujos ajustes estão destravados para edição. */
+  editando: null as string | null,
   refreshing: false,
   histPronto: false,
   falhas: [] as string[],

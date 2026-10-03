@@ -102,16 +102,22 @@ export function interactiveChart(el: HTMLElement, series: ISerie[], opts: IOpts)
   };
   const nearest = (x: number) => xs.reduce((b, q) => (Math.abs(q - x) < Math.abs(b - x) ? q : b), xs[0]);
 
+  // Um único "fechar" por gráfico: assim, ao arrastar, o painel é atualizado sem apagar a linha.
+  const aoFechar = () => { sel = null; draw(); };
   function inspect(clientX: number) {
     if (!opts.inspect) return;
     sel = nearest(xOf(clientX));
     draw();
-    showSheet(opts.inspect(sel), () => { sel = null; draw(); });
+    showSheet(opts.inspect(sel), aoFechar);
   }
 
   // Gestos
+  // Com o dedo, o toque só vira "consulta" quando fica claro que não é rolagem:
+  // arrastar para os lados, segurar parado um instante, ou tocar e soltar sem mexer.
   const ptrs = new Map<number, { x: number; y: number }>();
   let pinch: { d: number; cx: number; vx0: number; vx1: number } | null = null;
+  let toque: { id: number; x: number; y: number; timer: number } | null = null;
+  let consultando = false;
   let lastTap = 0;
   const minSpan = Math.max(60 * 864e5, (X1 - X0) / 40);
   const clamp = (a: number, b: number) => {
@@ -119,19 +125,27 @@ export function interactiveChart(el: HTMLElement, series: ISerie[], opts: IOpts)
     a = Math.max(X0, Math.min(a, X1 - span));
     return [a, a + span];
   };
+  const cancelaToque = () => { if (toque) clearTimeout(toque.timer); toque = null; };
+  const comecaConsulta = (x: number) => { cancelaToque(); consultando = true; inspect(x); };
+
+  // Enquanto consulta, impede a página de rolar junto com o dedo.
+  box.addEventListener('touchmove', e => { if (consultando || pinch) e.preventDefault(); }, { passive: false });
 
   box.addEventListener('pointerdown', e => {
     try { box.setPointerCapture(e.pointerId); } catch { /* ponteiro sintético */ }
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (ptrs.size === 2) {
+      cancelaToque(); consultando = false;
       const [a, b] = [...ptrs.values()];
       pinch = { d: Math.abs(a.x - b.x) || 1, cx: xOf((a.x + b.x) / 2), vx0, vx1 };
-      sel = null; hideSheet();
+      hideSheet();
     } else if (ptrs.size === 1) {
       const now = Date.now();
-      if (now - lastTap < 300) { vx0 = X0; vx1 = X1; draw(); lastTap = 0; return; }
+      if (now - lastTap < 300) { cancelaToque(); vx0 = X0; vx1 = X1; draw(); lastTap = 0; return; }
       lastTap = now;
-      inspect(e.clientX);
+      if (e.pointerType === 'mouse') { comecaConsulta(e.clientX); return; }
+      const x = e.clientX;
+      toque = { id: e.pointerId, x, y: e.clientY, timer: window.setTimeout(() => comecaConsulta(x), 250) };
     }
   });
   box.addEventListener('pointermove', e => {
@@ -145,13 +159,22 @@ export function interactiveChart(el: HTMLElement, series: ISerie[], opts: IOpts)
       const frac = (((a.x + b.x) / 2 - r.left) / r.width * w - L) / (w - L - R);
       [vx0, vx1] = clamp(pinch.cx - frac * span, pinch.cx - frac * span + span);
       draw();
-    } else if (ptrs.size === 1 && !pinch) {
+    } else if (toque && e.pointerId === toque.id) {
+      const dx = Math.abs(e.clientX - toque.x), dy = Math.abs(e.clientY - toque.y);
+      if (dy > 8 && dy > dx) cancelaToque();          // rolando a página: não abre nada
+      else if (dx > 8) comecaConsulta(e.clientX);      // arrastando para o lado: consulta
+    } else if (consultando && ptrs.size === 1) {
       inspect(e.clientX);
     }
   });
   const up = (e: PointerEvent) => {
     ptrs.delete(e.pointerId);
+    if (toque && e.pointerId === toque.id) {
+      // tocou e soltou sem mexer: mostra o ponto
+      if (e.type === 'pointerup') comecaConsulta(toque.x); else cancelaToque();
+    }
     if (ptrs.size < 2) pinch = null;
+    if (!ptrs.size) consultando = false; // o painel e a linha continuam até fechar
   };
   box.addEventListener('pointerup', up);
   box.addEventListener('pointercancel', up);

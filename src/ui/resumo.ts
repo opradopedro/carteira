@@ -92,5 +92,5 @@ export function renderResumo() {
       <div class="meta ${sign(o.v - o.cost)}">${o.cost ? fmtPct(o.v / o.cost - 1) + ' sobre o investido' : ''}</div><div class="meta r">${tot.value ? fmtNum(o.v / tot.value * 100) : '0'}%</div></button>`).join('')}</div>
   </div>`;
   if (c12) graficoRent($('#chRent'), c12, serie, 'Rentabilidade');
-  graficoPatrimonio($('#chEvo'), serie, 'Patrimônio', { inicio: 'Desde o início' });
+  graficoPatrimonio($('#chEvo'), serie, 'Patrimônio');
 }

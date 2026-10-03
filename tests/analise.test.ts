@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { comparar, ibovCurve, lerPonto, periodRange, pontoMaisProximo, proventosPorMes } from '../src/core/analise';
+import { comparar, ibovCurve, janela, lerPonto, periodRange, pontoMaisProximo, proventosPorMes } from '../src/core/analise';
 import { monthlySeries, type PriceAt } from '../src/core/perf';
 import type { Lancamento } from '../src/core/types';
 
@@ -22,17 +22,42 @@ describe('periodRange', () => {
   });
 });
 
-describe('lerPonto', () => {
-  const s = monthlySeries([L('2025-01-31', 'C', 100, 1000)], priceAt, '2025-04-30');
-  it('rendimento desde a compra, 12 meses e no mês até o ponto tocado', () => {
+describe('lerPonto (sobre o dinheiro aplicado)', () => {
+  it('resultado total = valor + vendas + proventos - total comprado', () => {
+    const s = monthlySeries([L('2025-01-31', 'C', 100, 1000)], priceAt, '2025-04-30');
     const r = lerPonto(s, 2);
     expect(r.v).toBeCloseTo(1210);
-    expect(r.desdeInicio).toBeCloseTo(0.21);
-    expect(r.rMes).toBeCloseTo(0.1);
-    expect(r.meses12).toBe(3);
+    expect(r.comprado).toBe(1000);
+    expect(r.resultado).toBeCloseTo(210);
+    expect(r.pctTotal).toBeCloseTo(0.21);
+    expect(r.mes.pct).toBeCloseTo(0.1);
+    expect(r.doze.meses).toBe(3);
+  });
+  it('compra pequena que cai e compra grande depois: a % segue o dinheiro, não a média dos meses', () => {
+    // Comprou R$ 1.000 a 10, caiu para 5 (−50%), comprou R$ 9.000 a 5 e o preço voltou a 6.
+    const p2: Record<string, number> = { '2025-01': 10, '2025-02': 5, '2025-03': 6 };
+    const pa: PriceAt = (_a, _c, ym) => p2[ym] ?? null;
+    const s = monthlySeries([L('2025-01-31', 'C', 100, 1000), L('2025-02-28', 'C', 1800, 9000)], pa, '2025-03-31');
+    const r = lerPonto(s, 2);
+    expect(r.comprado).toBe(10000);
+    expect(r.v).toBeCloseTo(1900 * 6);
+    expect(r.pctTotal).toBeCloseTo(0.14);                // ganhou 1.400 sobre 10.000
+    const twr = s.reduce((a, p) => a * (1 + p.r), 1) - 1; // a rentabilidade "por cota" seria −40%
+    expect(twr).toBeCloseTo(-0.4);
   });
   it('acha o ponto mais próximo de uma data', () => {
+    const s = monthlySeries([L('2025-01-31', 'C', 100, 1000)], priceAt, '2025-04-30');
     expect(pontoMaisProximo(s, Date.UTC(2025, 2, 25))).toBe(2);
+  });
+});
+
+describe('janela', () => {
+  it('ganho e base de um período com venda e provento', () => {
+    const s = monthlySeries([L('2025-01-31', 'C', 100, 1000), L('2025-03-15', 'V', 50, 600), L('2025-04-10', 'P', 0, 20)], priceAt, '2025-04-30');
+    const j = janela(s, 1, 3); // fev a abr
+    // início 1000; fim 50 × 12,1 = 605; vendas 600; proventos 20 → ganho 225 sobre base 1000
+    expect(j.ganho).toBeCloseTo(605 - 1000 + 600 + 20);
+    expect(j.base).toBe(1000);
   });
 });
 

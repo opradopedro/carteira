@@ -127,6 +127,7 @@ document.addEventListener('click', async e => {
   else if (t.id === 'btnAdd') openForm();
   else if (t.id === 'btnCancel') $('#formPanel').hidden = true;
   else if (t.id === 'btnRefresh') { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh('tudo'); }
+  else if (ds.editar !== undefined) { state.editando = ds.editar || null; rerenderPagina(); }
   else if (ds.per && ds.perChave) {
     const k = ds.perChave as keyof typeof state.per;
     state.per[k] = ds.per === 'y' ? { tipo: 'y', ano: Number(ds.ano) } : ds.per === 'custom' ? { ...state.per[k], tipo: 'custom' } : { tipo: ds.per as Periodo['tipo'] };
@@ -145,10 +146,10 @@ document.addEventListener('click', async e => {
   else if (t.id === 'btnReverIgnoradas') { await app.reverIgnoradas(); }
   else if (ds.savepx) {
     const p = parseNum($<HTMLInputElement>('#px').value);
-    if (p > 0) { await app.setPrecoManual(ds.savepx, p); toast('Preço salvo'); }
+    if (p > 0) { state.editando = null; await app.setPrecoManual(ds.savepx, p); toast('Preço salvo'); }
     else toast('Informe um preço maior que zero.');
   }
-  else if (ds.autopx) { await app.setPrecoManual(ds.autopx, null); toast('Voltando à cotação automática'); if (navigator.onLine) app.refresh('novos'); }
+  else if (ds.autopx) { state.editando = null; await app.setPrecoManual(ds.autopx, null); toast('Voltando à cotação automática'); if (navigator.onLine) app.refresh('novos'); }
   else if (ds.del) {
     if (ds.armed) { await app.removeLanc(ds.del); toast('Lançamento excluído'); }
     else {
