@@ -1,12 +1,13 @@
 // Estado do app e ações que alteram dados. As telas (src/ui/*) só leem daqui.
-import type { Classe, Lancamento, Modelo, Precos } from './core/types';
+import type { Classe, Lancamento, Modelo, Posicao, Precos } from './core/types';
 import { compute } from './core/calc';
 import { pendencias as calcPendencias, type Pendencia } from './core/pendencias';
 import { monthlySeries, type PontoMes } from './core/perf';
 import { keyOf, mergeImport, rowsToAReceber, rowsToLancs, type AReceber, type ResultadoLeitura } from './core/b3';
-import { newId, today, ymd } from './core/util';
+import { isB3Ticker, newId, today, ymd } from './core/util';
+import { deveBuscar, type Motivo } from './core/mercado';
 import * as db from './data/db';
-import type { Config, Indices } from './data/db';
+import type { Config, Indices, Uso } from './data/db';
 import { Historico } from './quotes/hist';
 import { refreshIndices, refreshQuotes } from './quotes/live';
 
@@ -35,6 +36,7 @@ export const state = {
   aReceber: null as { em: string; itens: AReceber[] } | null,
   pendIgnoradas: [] as string[],
   ultimoBackup: '',
+  uso: { mes: '', brapi: 0, cg: 0 } as Uso,
 };
 
 export const hist = new Historico();
@@ -72,6 +74,7 @@ export async function init() {
   state.pendIgnoradas = (await db.getKV('pendIgnoradas')) || [];
   state.ultimoBackup = (await db.getKV('ultimoBackup')) || '';
   state.filtros = (await db.getKV('filtros')) || [];
+  state.uso = (await db.getKV('uso')) || state.uso;
   state.aReceber = aReceber || null;
   state.lancs = lancs;
   state.precos = precos || {};
@@ -93,36 +96,46 @@ export async function loadHist() {
 }
 
 /**
- * Busca cotações e índices, poupando as cotas gratuitas das APIs:
- *  - 'diario': só vai à internet na primeira abertura do dia (senão usa o que está salvo);
- *  - 'tudo': botão Atualizar, busca tudo de novo;
+ * Busca cotações e índices, poupando as cotas gratuitas das APIs (regras em core/mercado.ts):
+ *  - 'abrir': ao abrir o app ou voltar a ele; cripto sempre, ações e FIIs só com o pregão aberto;
+ *  - 'pagina': ao entrar num ativo ou classe (mesma regra, só para eles);
+ *  - 'botao': botão Atualizar, busca tudo de novo;
  *  - 'novos': só os ativos que ainda não têm cotação ao vivo de hoje (após importar/lançar).
  */
-export type ModoAtualizacao = 'diario' | 'tudo' | 'novos';
+export type { Motivo };
 
 const ehHoje = (iso?: string) => !!iso && ymd(new Date(iso)) === today();
+const mesAtual = () => today().slice(0, 7);
 
-export async function refresh(modo: ModoAtualizacao = 'diario') {
-  if (state.refreshing) return;
-  if (modo === 'diario' && ehHoje(state.cotEm)) {
-    // Já atualizou hoje: só carrega o histórico (do cache, se offline) e o fechamento oficial.
-    await loadHist();
-    if (!ehHoje(state.indices?.em)) await atualizarIndices(false);
-    return;
-  }
-  state.refreshing = true; onChange();
+let emCurso: Promise<void> | null = null;
+export function refresh(motivo: Motivo = 'abrir', so: (p: Posicao) => boolean = () => true): Promise<void> {
+  // Pedidos explícitos (botão, lançamento novo) esperam o que estiver em curso; os automáticos são descartados.
+  if (emCurso) return motivo === 'botao' || motivo === 'novos' ? emCurso.then(() => refresh(motivo, so)) : emCurso;
+  emCurso = atualizar(motivo, so).finally(() => { emCurso = null; });
+  return emCurso;
+}
+
+async function atualizar(motivo: Motivo, so: (p: Posicao) => boolean) {
+  if (state.uso.mes !== mesAtual()) state.uso = { mes: mesAtual(), brapi: 0, cg: 0 };
+  const agora = new Date();
+  const alvo = new Set(model.open.filter(p => so(p) && (
+    p.c === 'cripto' ? deveBuscar('cripto', state.precos[p.a], motivo, agora)
+      : p.c !== 'tesouro' && isB3Ticker(p.a) && deveBuscar('b3', state.precos[p.a], motivo, agora, state.uso.brapi)
+  )).map(p => p.a));
+  // Sem nada para buscar ao vivo, ainda aplica o fechamento oficial mais recente (arquivos do app).
+  const vaiARede = alvo.size > 0;
+  if (vaiARede) { state.refreshing = true; onChange(); }
   try {
-    await hist.load(state.lancs);
+    if (!state.histPronto || motivo !== 'pagina') await hist.load(state.lancs);
     state.histPronto = true;
     recompute();
-    const aoVivo = (a: string) => ['brapi', 'coingecko'].includes(state.precos[a]?.fonte ?? '') && ehHoje(state.precos[a]?.em);
-    const r = await refreshQuotes(model.open, state.precos, state.cfg, hist, modo === 'novos' ? a => !aoVivo(a) : undefined);
+    const r = await refreshQuotes(model.open, state.precos, state.cfg, hist, a => alvo.has(a));
     state.precos = r.precos;
-    state.falhas = r.falhas;
-    state.avisos = r.avisos;
-    if (modo !== 'novos' || !state.cotEm) state.cotEm = new Date().toISOString();
-    await Promise.all([db.setKV('precos', state.precos), db.setKV('cotEm', state.cotEm)]);
-    await atualizarIndices(modo === 'tudo');
+    if (vaiARede) { state.falhas = r.falhas; state.avisos = r.avisos; }
+    state.uso = { ...state.uso, brapi: state.uso.brapi + r.req.brapi, cg: state.uso.cg + r.req.cg };
+    if (r.req.brapi || r.req.cg) state.cotEm = new Date().toISOString();
+    await Promise.all([db.setKV('precos', state.precos), db.setKV('cotEm', state.cotEm), db.setKV('uso', state.uso)]);
+    if (motivo !== 'pagina') await atualizarIndices(motivo === 'botao');
   } catch {
     state.falhas = ['Não foi possível atualizar agora. Mostrando as últimas cotações salvas.'];
   } finally {

@@ -9,6 +9,8 @@ import { cleanTicker, guessClass, newId, parseNum, today } from './core/util';
 import { CRIPTO_NOMES, buscarAtivos, type Sugestao } from './core/busca';
 import { ehCripto, montarLancamentos, type Moeda } from './core/moeda';
 import { CLASSES } from './core/types';
+import { LIMITE_BRAPI, mercadoAberto } from './core/mercado';
+import { abrirMenu, fecharMenu } from './ui/menu';
 import { $, brl, fmtD, fmtQuando, privacidade, toast } from './ui/fmt';
 import { renderResumo } from './ui/resumo';
 import { renderAtivos } from './ui/ativos';
@@ -18,7 +20,7 @@ import { renderBadge } from './ui/pendencias';
 import { renderPagina, tituloPagina } from './ui/paginas';
 import * as seg from './seguranca/bloqueio';
 import { bloqueioAberto, mostrarBloqueio } from './seguranca/tela';
-import { TABS, back, currentPage, initNav, nav, openPage, parsePage, setRenderView, setTab, type Tab } from './ui/nav';
+import { TABS, back, currentPage, initNav, nav, openPage, parsePage, setRenderView, setTab, type Page, type Tab } from './ui/nav';
 
 function applyTheme() {
   const t = state.cfg.tema;
@@ -41,6 +43,13 @@ function renderHeader() {
   else st.textContent = online ? 'Cotações ainda não atualizadas' : 'Offline';
   $('#btnRefresh').classList.toggle('spin', state.refreshing);
   ($('#btnRefresh') as HTMLButtonElement).disabled = state.refreshing;
+  $('#menuStatus').textContent = state.refreshing ? 'Atualizando…' : state.cotEm ? 'Última: ' + fmtQuando(state.cotEm) : 'Busca tudo agora';
+  const usoB = state.uso.mes === today().slice(0, 7) ? state.uso.brapi : 0;
+  $('#menuNota').innerHTML = (mercadoAberto(new Date())
+    ? 'Pregão aberto: ações e FIIs atualizam sozinhos ao abrir o app ou entrar no ativo (no máximo a cada 15 min).'
+    : 'Pregão fechado: ações e FIIs mostram o último preço; voltam a atualizar sozinhos das 10h às 18h em dias úteis.')
+    + ' Cripto atualiza sempre que você abre o app.'
+    + (state.cfg.brapiToken ? `<br>brapi este mês: ${usoB.toLocaleString('pt-BR')} de ${LIMITE_BRAPI.toLocaleString('pt-BR')} consultas grátis.` : '');
 
   const msgs: string[] = [];
   if (state.ready && !online && state.lancs.length) msgs.push('Sem internet: mostrando as últimas cotações salvas.');
@@ -245,7 +254,7 @@ document.addEventListener('click', async e => {
     const ctl = target.closest('button, input, select, label, .ichart, a');
     if (!ctl || ctl === pg || !pg.contains(ctl)) {
       const p = parsePage(pg.dataset.page!);
-      if (p) { openPage(p); return; }
+      if (p) { openPage(p); aoEntrar(p); return; }
     }
   }
   const t = target.closest('button');
@@ -285,7 +294,10 @@ document.addEventListener('click', async e => {
   }
   else if (t.id === 'btnAdd') openForm();
   else if (t.id === 'btnCancel') $('#formPanel').hidden = true;
-  else if (t.id === 'btnRefresh') { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh('tudo'); }
+  else if (t.id === 'btnMenu') abrirMenu();
+  else if (t.id === 'btnMenuFechar') fecharMenu();
+  else if (t.id === 'btnRefresh') fecharMenu(() => { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh('botao'); });
+  else if (ds.menuPage) { const p = parsePage(ds.menuPage); fecharMenu(() => { if (p && currentPage()?.k !== p.k) openPage(p); }); }
   else if (ds.editar !== undefined) { state.editando = ds.editar || null; rerenderPagina(); }
   else if (ds.salvarFiltro) {
     const k = ds.salvarFiltro as keyof typeof state.per;
@@ -488,18 +500,33 @@ async function backupFeito() {
   toast('Backup exportado');
 }
 
+/** Entrar num ativo ou classe busca a cotação ao vivo dele (respeitando as regras de core/mercado.ts). */
+function aoEntrar(p: Page) {
+  if (!navigator.onLine || !state.ready) return;
+  if (p.k === 'ativo') app.refresh('pagina', x => x.a === p.a);
+  else if (p.k === 'classe') app.refresh('pagina', x => x.c === p.c);
+}
+
 // Ao sair do app, cobre a tela (a miniatura de apps recentes não mostra valores);
-// ao voltar, pede o desbloqueio se passou do tempo escolhido.
+// ao voltar, pede o desbloqueio se passou do tempo escolhido e atualiza as cotações.
 let saiuEm = 0;
 document.addEventListener('visibilitychange', () => {
-  if (!seg.bloqueioAtivo()) return;
-  if (document.hidden) { saiuEm = Date.now(); document.body.classList.add('coberto'); return; }
-  const cfg = seg.lerConfig()!;
-  if (!bloqueioAberto() && Date.now() - saiuEm >= cfg.tempo * 1000) mostrarBloqueio();
-  else document.body.classList.remove('coberto');
+  if (document.hidden) {
+    saiuEm = Date.now();
+    if (seg.bloqueioAtivo()) document.body.classList.add('coberto');
+    return;
+  }
+  const fora = Date.now() - saiuEm;
+  const atualizar = () => { if (fora >= 60_000 && state.ready && state.lancs.length && navigator.onLine) app.refresh('abrir'); };
+  if (seg.bloqueioAtivo()) {
+    const cfg = seg.lerConfig()!;
+    if (!bloqueioAberto() && fora >= cfg.tempo * 1000) { mostrarBloqueio().then(atualizar); return; }
+    document.body.classList.remove('coberto');
+  }
+  atualizar();
 });
 
-window.addEventListener('online', () => { render(); if (state.lancs.length) app.refresh('diario'); });
+window.addEventListener('online', () => { render(); if (state.lancs.length) app.refresh('abrir'); });
 window.addEventListener('offline', render);
 // Só redesenha se a largura mudar (no celular, a barra de endereço muda a altura ao rolar).
 let rz = 0, largura = window.innerWidth;
@@ -507,6 +534,8 @@ window.addEventListener('resize', () => {
   clearTimeout(rz);
   rz = window.setTimeout(() => { if (window.innerWidth !== largura) { largura = window.innerWidth; render(); } }, 150);
 });
+
+document.getElementById('menuFundo')!.addEventListener('click', () => fecharMenu());
 
 /* ---------- início ---------- */
 async function start() {
@@ -523,7 +552,7 @@ async function start() {
   applyTheme();
   render();
   if (state.lancs.length) {
-    if (navigator.onLine) await app.refresh('diario');
+    if (navigator.onLine) await app.refresh('abrir');
     else await app.loadHist();
   }
 }

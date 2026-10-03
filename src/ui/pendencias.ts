@@ -59,4 +59,9 @@ export function renderBadge() {
   b.textContent = String(n);
   b.hidden = n === 0;
   $('#btnPend').setAttribute('aria-label', n ? `Pendências: ${n}` : 'Pendências');
+  $('#pendSub').textContent = n ? `${n} ${n === 1 ? 'item precisa' : 'itens precisam'} de você` : 'Tudo em dia';
+  const m = $('#menuCount');
+  m.textContent = String(n);
+  m.hidden = n === 0;
+  $('#btnMenu').setAttribute('aria-label', n ? `Menu (${n} pendências)` : 'Menu');
 }

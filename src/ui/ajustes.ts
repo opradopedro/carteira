@@ -51,7 +51,7 @@ export async function renderAjustes(el: HTMLElement) {
         <button class="btn primary" type="submit">Salvar</button>
         <button class="btn" type="button" id="btnShowKeys">Mostrar</button>
       </div>
-      <div class="note full">Sem token da brapi, ações e FIIs usam o fechamento do último pregão (publicado pela B3 todas as noites). Para poupar o limite gratuito, as cotações são buscadas só na primeira abertura do dia e quando você toca em Atualizar. Tesouro Direto atualiza uma vez por dia. O token não entra no backup.</div>
+      <div class="note full">Sem token da brapi, ações e FIIs usam o fechamento do último pregão (publicado pela B3 todas as noites). Cripto atualiza sempre que você abre o app ou entra numa cripto. Ações e FIIs atualizam do mesmo jeito, mas só com o pregão aberto (10h às 18h, dias úteis) e no máximo a cada 15 minutos por ativo; perto do fim das 15.000 consultas grátis do mês, só pelo botão Atualizar. Tesouro Direto atualiza uma vez por dia. O token não entra no backup.</div>
     </form>
   </div>
 

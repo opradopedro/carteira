@@ -9,7 +9,7 @@ PWA pessoal para acompanhar investimentos (ações, FIIs, cripto, Tesouro Direto
 - **Preço do dia no lançamento manual**: ao escolher ativo e data, o app preenche o fechamento daquele dia (B3), o PU de compra/venda (Tesouro) ou o fechamento do Mercado Bitcoin (cripto), a partir de arquivos diários publicados com o app.
 - **Cripto paga em dólar ou outra cripto**: o preço é convertido para reais pela cotação do dia (dólar comercial do Banco Central ou fechamento do Mercado Bitcoin); trocar cripto por cripto gera a compra de uma e a venda da outra.
 - **Segurança**: bloqueio com PIN do app (guardado só como hash PBKDF2) e digital/rosto do celular (WebAuthn, com verificação da assinatura); botão de olho que oculta valores em dinheiro e quantidades, mantendo porcentagens e gráficos.
-- **Cotações uma vez por dia**: na primeira abertura do dia e no botão Atualizar, para poupar os limites gratuitos das APIs.
+- **Cotações sob demanda**: cripto ao abrir o app ou entrar numa cripto (no máximo 1x por minuto); ações e FIIs do mesmo jeito, mas só com o pregão aberto e no máximo a cada 15 min por ativo, com contador mensal para não passar do plano gratuito da brapi. O botão Atualizar (no menu lateral) busca tudo.
 - **Cotações**: só os códigos dos ativos saem do aparelho.
 
 | Fonte | Uso | Observação |

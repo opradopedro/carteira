@@ -13,6 +13,7 @@ export interface ResultadoAtualizacao {
   precos: Precos;
   falhas: string[];   // mensagens curtas para o usuário
   avisos: string[];
+  req: { brapi: number; cg: number }; // requisições feitas (para acompanhar o limite gratuito)
 }
 
 async function getJson(url: string, headers: Record<string, string> = {}, timeout = 15000) {
@@ -34,11 +35,12 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
 }
 
 /** brapi.dev: plano gratuito aceita 1 ativo por requisição. */
-async function brapi(tickers: string[], token: string, out: Precos, falhas: string[]) {
+async function brapi(tickers: string[], token: string, out: Precos, falhas: string[], req: { brapi: number }) {
   let erroToken = false, limite = false, outros = 0;
   const naoAchou: string[] = [];
   await pool(tickers, 4, async t => {
     if (erroToken || limite) return;
+    req.brapi++;
     try {
       const j = await getJson(`https://brapi.dev/api/quote/${encodeURIComponent(t)}`, { Authorization: `Bearer ${token}` });
       const r = j?.results?.[0];
@@ -59,9 +61,10 @@ async function brapi(tickers: string[], token: string, out: Precos, falhas: stri
   if (naoAchou.length) falhas.push(`brapi não conhece: ${naoAchou.join(', ')}.`);
 }
 
-async function coingecko(tickers: string[], key: string | undefined, out: Precos, falhas: string[]) {
+async function coingecko(tickers: string[], key: string | undefined, out: Precos, falhas: string[], req: { cg: number }) {
   const ids = tickers.map(t => COINGECKO_IDS[t]).filter(Boolean);
   if (!ids.length) return;
+  req.cg++;
   try {
     const j = await getJson(
       `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=brl&include_last_updated_at=true`,
@@ -81,6 +84,7 @@ async function coingecko(tickers: string[], key: string | undefined, out: Precos
 export async function refreshQuotes(open: Posicao[], antigos: Precos, cfg: Config, hist: Historico, buscar: (a: string) => boolean = () => true): Promise<ResultadoAtualizacao> {
   const precos: Precos = { ...antigos };
   const falhas: string[] = [], avisos: string[] = [];
+  const req = { brapi: 0, cg: 0 };
   const manual = (a: string) => antigos[a]?.fonte === 'manual';
 
   // 1) Base: fechamento oficial mais recente (B3 / Tesouro), vindo dos arquivos públicos do app.
@@ -97,12 +101,12 @@ export async function refreshQuotes(open: Posicao[], antigos: Precos, cfg: Confi
   const cr = open.filter(p => !manual(p.a) && buscar(p.a) && p.c === 'cripto').map(p => p.a);
   const tasks: Promise<void>[] = [];
   if (b3.length) {
-    if (cfg.brapiToken) tasks.push(brapi(b3, cfg.brapiToken, precos, falhas));
+    if (cfg.brapiToken) tasks.push(brapi(b3, cfg.brapiToken, precos, falhas, req));
     else avisos.push('Sem token da brapi: ações e FIIs mostram o fechamento do último pregão.');
   }
-  if (cr.length) tasks.push(coingecko(cr, cfg.cgKey, precos, falhas));
+  if (cr.length) tasks.push(coingecko(cr, cfg.cgKey, precos, falhas, req));
   await Promise.all(tasks);
-  return { precos, falhas, avisos };
+  return { precos, falhas, avisos, req };
 }
 
 /**
