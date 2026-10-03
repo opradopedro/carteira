@@ -1,14 +1,43 @@
 import { hist, state } from '../app';
 import { esc, fmtD, fmtQuando } from './fmt';
+import { biometriaDisponivel, lerConfig } from '../seguranca/bloqueio';
 
 export async function renderAjustes(el: HTMLElement) {
   const c = state.cfg;
   const est = await navigator.storage?.estimate?.().catch(() => null);
   const usado = est?.usage != null ? `${(est.usage / 1024 / 1024).toFixed(1).replace('.', ',')} MB usados neste aparelho.` : '';
   const m = hist.meta;
+  const blq = lerConfig();
+  const bioOk = await biometriaDisponivel();
+  const tempos: [number, string][] = [[0, 'Sempre que sair do app'], [60, 'Depois de 1 minuto fora'], [300, 'Depois de 5 minutos fora'], [1800, 'Depois de 30 minutos fora']];
   el.innerHTML = `
   <div class="panel">
     <div class="sub">Tudo o que você lança fica só neste aparelho. Para buscar cotações, o app envia apenas os códigos dos ativos (ex.: PETR4), nunca quantidades ou valores.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Segurança</h2>
+    ${blq?.ativo ? `
+      <div class="ok">Bloqueio ativo: o app pede ${blq.cred ? 'sua digital/rosto ou o PIN' : 'o PIN'} para abrir.</div>
+      <div class="field"><label for="segTempo">Pedir de novo</label><select id="segTempo">${tempos.map(([v, n]) => `<option value="${v}" ${blq.tempo === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+      ${blq.cred ? '<div class="row"><span class="sub">Digital/rosto cadastrado.</span><button type="button" class="btn small" id="btnSegBioRem">Remover digital</button></div>'
+        : bioOk ? '<div class="row"><button type="button" class="btn primary small" id="btnSegBio">Usar digital ou rosto</button></div>'
+        : '<div class="note">Este aparelho/navegador não oferece desbloqueio por digital para o app. O PIN continua valendo.</div>'}
+      <details class="como"><summary>Trocar ou desativar o PIN</summary>
+        <div class="form" style="margin-top:8px">
+          <div class="field"><label for="segPinAtual">PIN atual</label><input id="segPinAtual" type="password" inputmode="numeric" autocomplete="off"></div>
+          <div class="field"><label for="segPinNovo">Novo PIN</label><input id="segPinNovo" type="password" inputmode="numeric" autocomplete="off"></div>
+          <div class="row full"><button type="button" class="btn small" id="btnSegTrocar">Trocar PIN</button><button type="button" class="btn small danger" id="btnSegDesativar">Desativar bloqueio</button></div>
+        </div></details>`
+    : `
+      <div class="sub">Peça um PIN (e, se quiser, sua digital ou rosto) para abrir o app.</div>
+      <div class="form">
+        <div class="field"><label for="segPin1">Crie um PIN (4 a 12 números)</label><input id="segPin1" type="password" inputmode="numeric" autocomplete="off"></div>
+        <div class="field"><label for="segPin2">Repita o PIN</label><input id="segPin2" type="password" inputmode="numeric" autocomplete="off"></div>
+        <div class="row full"><button type="button" class="btn primary small" id="btnSegAtivar">Ativar bloqueio</button></div>
+      </div>`}
+    <div class="note">O bloqueio impede que outra pessoa abra o app no seu celular. Os dados continuam guardados só no aparelho, como antes; se esquecer o PIN, a saída é apagar os dados e restaurar um backup.</div>
+    <div class="err" id="segErr" hidden></div>
   </div>
 
   <div class="panel">

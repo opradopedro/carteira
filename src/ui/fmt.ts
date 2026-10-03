@@ -3,9 +3,19 @@ export const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNo
 export const esc = (s: unknown) =>
   String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
-export const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-export const compact = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
-const qtd = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 8 });
+/**
+ * Modo privado (botão de olho): esconde valores em dinheiro e quantidades.
+ * Porcentagens e o desenho dos gráficos continuam visíveis.
+ */
+export const privacidade = { oculto: false };
+const OCULTO = '•••••';
+const brlFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const compactFmt = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
+export const brl = { format: (v: number) => (privacidade.oculto ? 'R$ ' + OCULTO : brlFmt.format(v)) };
+/** Eixo de gráficos em reais (some no modo privado). */
+export const compact = { format: (v: number) => (privacidade.oculto ? '' : compactFmt.format(v)) };
+const qtdFmt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 8 });
+const qtd = { format: (v: number) => (privacidade.oculto ? OCULTO : qtdFmt.format(v)) };
 const pct2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct1 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
 

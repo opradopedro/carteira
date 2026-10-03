@@ -9,13 +9,15 @@ import { cleanTicker, guessClass, newId, parseNum, today } from './core/util';
 import { CRIPTO_NOMES, buscarAtivos, type Sugestao } from './core/busca';
 import { ehCripto, montarLancamentos, type Moeda } from './core/moeda';
 import { CLASSES } from './core/types';
-import { $, brl, fmtD, fmtQuando, toast } from './ui/fmt';
+import { $, brl, fmtD, fmtQuando, privacidade, toast } from './ui/fmt';
 import { renderResumo } from './ui/resumo';
 import { renderAtivos } from './ui/ativos';
 import { renderProventos } from './ui/proventos';
 import { renderLancs, setFiltro } from './ui/lancamentos';
 import { renderBadge } from './ui/pendencias';
 import { renderPagina, tituloPagina } from './ui/paginas';
+import * as seg from './seguranca/bloqueio';
+import { bloqueioAberto, mostrarBloqueio } from './seguranca/tela';
 import { TABS, back, currentPage, initNav, nav, openPage, parsePage, setRenderView, setTab, type Tab } from './ui/nav';
 
 function applyTheme() {
@@ -65,6 +67,18 @@ function render() {
   if (nav.tab === 'lancamentos') renderLancs();
 }
 
+function erroSeg(m: string) { const e = $('#segErr'); e.textContent = m; e.hidden = false; }
+
+function atualizarOlho() {
+  const b = $('#btnOlho');
+  b.classList.toggle('ativo', privacidade.oculto);
+  b.setAttribute('aria-pressed', String(privacidade.oculto));
+  b.setAttribute('aria-label', privacidade.oculto ? 'Mostrar valores' : 'Ocultar valores');
+  b.innerHTML = privacidade.oculto
+    ? '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.6 5.1A9.6 9.6 0 0 1 12 5c6 0 9.5 7 9.5 7a16 16 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2.5 12 2.5 12S6 19 12 19c1.8 0 3.4-.6 4.7-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+}
+
 /** Re-desenha só a página aberta (após mudar um filtro, por exemplo), mantendo a rolagem. */
 function rerenderPagina() {
   const y = window.scrollY;
@@ -99,7 +113,7 @@ function syncForm() {
   $('#wMoeda label').textContent = $<HTMLSelectElement>('#fTipo').value === 'V' ? 'Recebido em' : 'Pago em';
 }
 const moedaForm = () => ($('#wMoeda').hidden ? 'BRL' : $<HTMLSelectElement>('#fMoeda').value) as Moeda;
-const fmtMoeda = (m: Moeda, x: number) => m === 'BRL' ? brl.format(x) : m === 'USD'
+const fmtMoeda = (m: Moeda, x: number) => m === 'BRL' ? brl.format(x) : privacidade.oculto ? '••••• ' + m : m === 'USD'
   ? 'US$ ' + new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x)
   : new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 8 }).format(x) + ' ' + m;
 function guessFormClass() {
@@ -239,6 +253,32 @@ document.addEventListener('click', async e => {
   const ds = t.dataset;
   if (ds.tab) setTab(ds.tab as Tab);
   else if (t.id === 'btnBack' || t.id === 'btnBack2') back();
+  else if (t.id === 'btnSegAtivar') {
+    const p1 = $<HTMLInputElement>('#segPin1').value, p2 = $<HTMLInputElement>('#segPin2').value;
+    if (!/^\d{4,12}$/.test(p1)) return erroSeg('O PIN precisa ter de 4 a 12 números.');
+    if (p1 !== p2) return erroSeg('Os dois PINs não são iguais.');
+    await seg.definirPin(p1);
+    toast('Bloqueio ativado');
+    rerenderPagina();
+    if (await seg.biometriaDisponivel()) setTimeout(() => toast('Agora, se quiser, toque em "Usar digital ou rosto".'), 1800);
+  }
+  else if (t.id === 'btnSegBio') {
+    try { await seg.cadastrarBiometria(); toast('Digital/rosto cadastrado'); rerenderPagina(); }
+    catch (err) { erroSeg((err as Error).name === 'NotAllowedError' ? 'Cadastro cancelado.' : (err as Error).message || 'Não foi possível cadastrar.'); }
+  }
+  else if (t.id === 'btnSegBioRem') { seg.removerBiometria(); toast('Digital removida; o PIN continua valendo'); rerenderPagina(); }
+  else if (t.id === 'btnSegTrocar' || t.id === 'btnSegDesativar') {
+    if (!(await seg.conferirPin($<HTMLInputElement>('#segPinAtual').value))) return erroSeg('PIN atual errado.');
+    if (t.id === 'btnSegDesativar') { seg.desativar(); toast('Bloqueio desativado'); rerenderPagina(); return; }
+    const novo = $<HTMLInputElement>('#segPinNovo').value;
+    if (!/^\d{4,12}$/.test(novo)) return erroSeg('O novo PIN precisa ter de 4 a 12 números.');
+    await seg.definirPin(novo); toast('PIN trocado'); rerenderPagina();
+  }
+  else if (t.id === 'btnOlho') {
+    privacidade.oculto = !privacidade.oculto;
+    try { localStorage.setItem('oculto', privacidade.oculto ? '1' : ''); } catch { /* ignora */ }
+    atualizarOlho(); rerenderPagina();
+  }
   else if (ds.delLanc) {
     if (ds.armed) { await app.removeLanc(ds.delLanc); toast('Lançamento excluído'); back(); }
     else { ds.armed = '1'; t.textContent = 'Toque de novo para confirmar'; setTimeout(() => { if (t.isConnected) { delete ds.armed; t.textContent = 'Excluir lançamento'; } }, 4000); }
@@ -366,6 +406,7 @@ document.addEventListener('change', async e => {
   else if (el.id === 'fData') sugerirPreco();
   else if (el.id === 'fClasse' || el.id === 'fMoeda') { syncForm(); sugerirPreco(); }
   else if (el.id === 'eTipo') syncEdit();
+  else if (el.id === 'segTempo') { seg.definirTempo(Number(el.value)); toast('Preferência salva'); }
   else if (el.id === 'ordemLanc') {
     state.ordemLanc = el.value as typeof state.ordemLanc;
     try { localStorage.setItem('ordemLanc', state.ordemLanc); } catch { /* ignora */ }
@@ -447,6 +488,17 @@ async function backupFeito() {
   toast('Backup exportado');
 }
 
+// Ao sair do app, cobre a tela (a miniatura de apps recentes não mostra valores);
+// ao voltar, pede o desbloqueio se passou do tempo escolhido.
+let saiuEm = 0;
+document.addEventListener('visibilitychange', () => {
+  if (!seg.bloqueioAtivo()) return;
+  if (document.hidden) { saiuEm = Date.now(); document.body.classList.add('coberto'); return; }
+  const cfg = seg.lerConfig()!;
+  if (!bloqueioAberto() && Date.now() - saiuEm >= cfg.tempo * 1000) mostrarBloqueio();
+  else document.body.classList.remove('coberto');
+});
+
 window.addEventListener('online', () => { render(); if (state.lancs.length) app.refresh('diario'); });
 window.addEventListener('offline', render);
 // Só redesenha se a largura mudar (no celular, a barra de endereço muda a altura ao rolar).
@@ -461,9 +513,12 @@ async function start() {
   app.setOnChange(render);
   setRenderView(render);
   try { const o = localStorage.getItem('ordemLanc'); if (o) state.ordemLanc = o as typeof state.ordemLanc; } catch { /* ignora */ }
+  try { privacidade.oculto = localStorage.getItem('oculto') === '1'; } catch { /* ignora */ }
+  atualizarOlho();
   initNav(location.hash.slice(1));
   renderLancs(); syncForm();
   render();
+  if (seg.bloqueioAtivo()) await mostrarBloqueio(); // nada da carteira é carregado antes de desbloquear
   await app.init();
   applyTheme();
   render();
