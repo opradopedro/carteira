@@ -227,3 +227,12 @@ body.bloqueado > :not(#lock), body.coberto > :not(#lock){filter:blur(22px);point
 .badge.inline{position:static;border:0}
 .menu-nota{margin-top:auto;font-size:12.5px;color:var(--muted);padding:12px 8px 0;border-top:1px solid var(--line)}
 @media (prefers-reduced-motion: reduce){#menu,#menuFundo{transition:none}}
+/* Janela de puxar backup */
+.dlg{border:1px solid var(--line);border-radius:20px;background:var(--surface);color:var(--ink);padding:20px 18px;width:min(92vw,460px);
+  display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.dlg:not([open]){display:none}
+.dlg::backdrop{background:rgba(5,8,20,.55)}
+.dlg .note{margin:0}
+.dlg-acoes{display:flex;flex-direction:column;gap:8px}
+.dlg-acoes .btn{width:100%;justify-content:center}
+.btn.danger{border-color:var(--loss);color:var(--loss)}

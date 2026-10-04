@@ -3,7 +3,8 @@ import { registerSW } from 'virtual:pwa-register';
 import * as app from './app';
 import { model, state } from './app';
 import type { Periodo } from './core/analise';
-import { buildBackup, downloadJson, parseBackup } from './data/backup';
+import { buildBackup, downloadJson } from './data/backup';
+import { puxarDeArquivo } from './ui/puxarBackup';
 import type { Classe, TipoLanc } from './core/types';
 import { cleanTicker, guessClass, newId, parseNum, today } from './core/util';
 import { CRIPTO_NOMES, buscarAtivos, type Sugestao } from './core/busca';
@@ -444,19 +445,9 @@ document.addEventListener('change', async e => {
       msg.textContent = 'Não foi possível importar. Tente de novo.';
     }
   }
-  else if (el.id === 'fileBackup') {
+  else if (el.dataset.backup !== undefined) {
     const f = el.files?.[0]; el.value = '';
-    if (!f) return;
-    const msg = $('#backupMsg'); msg.hidden = false;
-    try {
-      const b = parseBackup(await f.text());
-      if (state.lancs.length && !confirm(`Restaurar o backup de ${b.exportadoEm ? fmtQuando(b.exportadoEm) : 'data desconhecida'} com ${b.lancs.length} lançamentos? A carteira atual (${state.lancs.length} lançamentos) será substituída.`)) { msg.hidden = true; return; }
-      await app.restoreBackup(b.lancs, b.precosManuais);
-      msg.textContent = `Backup restaurado: ${b.lancs.length} lançamentos.`;
-      if (navigator.onLine) app.refresh('novos');
-    } catch (err) {
-      msg.textContent = (err as Error).message || 'Não consegui ler o backup.';
-    }
+    if (f) await puxarDeArquivo(f);
   }
 });
 
@@ -480,7 +471,7 @@ document.addEventListener('focusout', e => {
 });
 
 async function exportBackup() {
-  const b = buildBackup(state.lancs, state.precos);
+  const b = buildBackup(state.lancs, state.precos, app.extrasBackup());
   const nome = `carteira-backup-${today()}.json`;
   const file = new File([JSON.stringify(b, null, 1)], nome, { type: 'application/json' });
   try {

@@ -78,9 +78,8 @@ export async function renderAjustes(el: HTMLElement) {
     <div class="sub">Seus dados existem só aqui. Exporte um backup de vez em quando e guarde no Google Drive, por exemplo.</div>
     <div class="row">
       <button class="btn primary" type="button" id="btnExport">Exportar backup</button>
-      <label class="btn" for="fileBackup">Restaurar backup<input type="file" id="fileBackup" accept=".json,application/json"></label>
+      <label class="btn" for="fileBackup">Puxar dados de um backup<input type="file" id="fileBackup" data-backup accept=".json,application/json"></label>
     </div>
-    <div class="sub" id="backupMsg" hidden></div>
   </div>
 
   <div class="panel">

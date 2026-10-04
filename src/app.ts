@@ -7,6 +7,7 @@ import { keyOf, mergeImport, rowsToAReceber, rowsToLancs, type AReceber, type Re
 import { isB3Ticker, newId, today, ymd } from './core/util';
 import { deveBuscar, type Motivo } from './core/mercado';
 import * as db from './data/db';
+import { juntar, type Backup, type Extras } from './data/backup';
 import type { Config, Indices, Uso } from './data/db';
 import { Historico } from './quotes/hist';
 import { refreshIndices, refreshQuotes } from './quotes/live';
@@ -255,15 +256,51 @@ export async function importB3(files: File[]): Promise<string[]> {
   return msgs;
 }
 
-export async function restoreBackup(lancs: Lancamento[], precosManuais: Precos) {
-  await db.replaceAllLancs(lancs);
-  const precos = { ...precosManuais };
-  await db.setKV('precos', precos);
-  state.lancs = lancs; state.precos = precos;
-  await hist.load(lancs);
+/**
+ * Puxa os dados de um backup.
+ *  - 'substituir': a carteira passa a ser exatamente a do backup;
+ *  - 'juntar': acrescenta só o que ainda não existe aqui (nada duplica) e soma filtros e preferências.
+ */
+export async function puxarBackup(b: Backup, modo: 'juntar' | 'substituir'): Promise<{ added: number; dup: number }> {
+  const x = b.extras ?? {};
+  let added = b.lancs.length, dup = 0;
+  if (modo === 'substituir') {
+    await db.replaceAllLancs(b.lancs);
+    state.lancs = b.lancs;
+    state.precos = { ...b.precosManuais };
+    state.filtros = x.filtros ?? [];
+    state.pendIgnoradas = x.pendIgnoradas ?? [];
+    state.aReceber = x.aReceber ?? null;
+    if (x.tema) state.cfg = { ...state.cfg, tema: x.tema };
+  } else {
+    const r = juntar(state.lancs, b.lancs);
+    added = r.added.length; dup = r.dup;
+    await db.putLancs(r.added);
+    state.lancs = r.next;
+    // Preço manual: o que já está aqui vale; o do backup só entra para ativos sem preço manual.
+    const precos = { ...state.precos };
+    for (const [a, p] of Object.entries(b.precosManuais)) if (precos[a]?.fonte !== 'manual') precos[a] = p;
+    state.precos = precos;
+    const ids = new Set(state.filtros.map(f => f.id));
+    state.filtros = [...state.filtros, ...(x.filtros ?? []).filter(f => !ids.has(f.id))];
+    state.pendIgnoradas = [...new Set([...state.pendIgnoradas, ...(x.pendIgnoradas ?? [])])];
+    if (x.aReceber && (!state.aReceber || x.aReceber.em > state.aReceber.em)) state.aReceber = x.aReceber;
+    if (x.tema && !state.cfg.tema) state.cfg = { ...state.cfg, tema: x.tema };
+  }
+  await Promise.all([
+    db.setKV('precos', state.precos), db.setKV('filtros', state.filtros), db.setKV('pendIgnoradas', state.pendIgnoradas),
+    db.setKV('config', state.cfg), state.aReceber ? db.setKV('aReceber', state.aReceber) : Promise.resolve(),
+  ]);
+  await hist.load(state.lancs);
   state.histPronto = true;
   recompute(); onChange();
+  return { added, dup };
 }
+
+/** Dados que vão no backup além dos lançamentos. */
+export const extrasBackup = (): Extras => ({
+  filtros: state.filtros, pendIgnoradas: state.pendIgnoradas, aReceber: state.aReceber, tema: state.cfg.tema,
+});
 
 export async function wipe() {
   await db.clearAll();

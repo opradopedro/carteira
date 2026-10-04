@@ -42,8 +42,9 @@ export function renderResumo() {
   if (!state.ready) { el.innerHTML = '<div class="panel"><div class="empty">Abrindo seus dados…</div></div>'; return; }
   if (!state.lancs.length) {
     el.innerHTML = `<div class="panel"><h2>Sua carteira está vazia</h2>
-      <div class="empty">Vá em <b>Lançamentos</b> para importar as planilhas da B3 ou lançar a primeira compra.</div>
-      <div class="row"><button class="btn primary" type="button" data-tab="lancamentos">Ir para Lançamentos</button></div></div>`;
+      <div class="empty">Vá em <b>Lançamentos</b> para importar as planilhas da B3 ou lançar a primeira compra. Já usava o app em outro aparelho? Puxe os dados do seu backup.</div>
+      <div class="row"><button class="btn primary" type="button" data-tab="lancamentos">Ir para Lançamentos</button>
+        <label class="btn" for="fileBackupVazio">Puxar dados de um backup<input type="file" id="fileBackupVazio" data-backup accept=".json,application/json"></label></div></div>`;
     return;
   }
   const pct = tot.cost ? tot.res / tot.cost : 0;
