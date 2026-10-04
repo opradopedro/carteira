@@ -7,7 +7,7 @@ export const esc = (s: unknown) =>
  * Modo privado (botão de olho): esconde valores em dinheiro e quantidades.
  * Porcentagens e o desenho dos gráficos continuam visíveis.
  */
-export const privacidade = { oculto: false };
+export const privacidade = { oculto: true };
 const OCULTO = '•••••';
 const brlFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const compactFmt = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });

@@ -286,7 +286,6 @@ document.addEventListener('click', async e => {
   }
   else if (t.id === 'btnOlho') {
     privacidade.oculto = !privacidade.oculto;
-    try { localStorage.setItem('oculto', privacidade.oculto ? '1' : ''); } catch { /* ignora */ }
     atualizarOlho(); rerenderPagina();
   }
   else if (ds.delLanc) {
@@ -533,7 +532,9 @@ async function start() {
   app.setOnChange(render);
   setRenderView(render);
   try { const o = localStorage.getItem('ordemLanc'); if (o) state.ordemLanc = o as typeof state.ordemLanc; } catch { /* ignora */ }
-  try { privacidade.oculto = localStorage.getItem('oculto') === '1'; } catch { /* ignora */ }
+  // Toda abertura do zero começa com os valores ocultos; voltar do segundo plano mantém como estava.
+  privacidade.oculto = true;
+  try { localStorage.removeItem('oculto'); } catch { /* ignora */ }
   atualizarOlho();
   initNav(location.hash.slice(1));
   renderLancs(); syncForm();
