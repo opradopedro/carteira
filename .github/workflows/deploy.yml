@@ -4,21 +4,36 @@ on:
   push:
     branches: [main]
   schedule:
-    # Atualiza as cotações públicas (B3 e Tesouro) depois do fechamento e de manhã (horário UTC).
-    - cron: '41 0,14 * * *'
+    # Atualiza as cotações públicas (horário UTC; Brasília = UTC-3):
+    # 21h41 depois do fechamento da B3, 7h41 quando sai o CSV do Tesouro e, em dias úteis,
+    # 10h41, 13h41 e 16h41 para pegar o preço do dia do Tesouro Direto.
+    - cron: '41 0,10 * * *'
+    - cron: '41 13,16,19 * * 1-5'
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
+  # O GitHub roda os agendamentos na branch padrão do repositório; o Pages só publica a partir da main.
+  # Se a branch padrão não for a main, o agendamento só dispara a publicação na main.
+  redirecionar:
+    if: github.event_name == 'schedule' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh workflow run deploy.yml --ref main --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   build:
+    if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

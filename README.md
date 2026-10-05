@@ -9,13 +9,14 @@ PWA pessoal para acompanhar investimentos (ações, FIIs, cripto, Tesouro Direto
 - **Preço do dia no lançamento manual**: ao escolher ativo e data, o app preenche o fechamento daquele dia (B3), o PU de compra/venda (Tesouro) ou o fechamento do Mercado Bitcoin (cripto), a partir de arquivos diários publicados com o app.
 - **Cripto paga em dólar ou outra cripto**: o preço é convertido para reais pela cotação do dia (dólar comercial do Banco Central ou fechamento do Mercado Bitcoin); trocar cripto por cripto gera a compra de uma e a venda da outra.
 - **Segurança**: bloqueio com PIN do app (guardado só como hash PBKDF2) e digital/rosto do celular (WebAuthn, com verificação da assinatura); botão de olho que oculta valores em dinheiro e quantidades, mantendo porcentagens e gráficos; o app sempre abre com os valores ocultos (voltar do segundo plano mantém como estava).
-- **Cotações sob demanda**: cripto ao abrir o app ou entrar numa cripto (no máximo 1x por minuto); ações e FIIs do mesmo jeito, mas só com o pregão aberto e no máximo a cada 15 min por ativo, com contador mensal para não passar do plano gratuito da brapi. O botão Atualizar (no menu lateral) busca tudo.
+- **Cotações sob demanda**: Tesouro Direto pelo preço do dia no site do Tesouro (o CSV oficial só chega até o dia útil anterior); cripto ao abrir o app ou entrar numa cripto (no máximo 1x por minuto); ações e FIIs do mesmo jeito, mas só com o pregão aberto e no máximo a cada 15 min por ativo, com contador mensal para não passar do plano gratuito da brapi. O botão Atualizar (no menu lateral) busca tudo.
 - **Cotações**: só os códigos dos ativos saem do aparelho.
 
 | Fonte | Uso | Observação |
 |---|---|---|
 | [brapi.dev](https://brapi.dev) | ações, FIIs, ETFs em tempo quase real | token gratuito, informado em Ajustes (fica só no aparelho) |
-| [CoinGecko](https://www.coingecko.com/en/api) | cripto | chave Demo opcional |
+| [CoinGecko](https://www.coingecko.com/en/api) | cripto | chave Demo opcional; se falhar, usa o Mercado Bitcoin |
+| Tesouro Direto (site) | preço do dia dos títulos | lista pública, consultada direto do celular |
 | [BCB SGS](https://dadosabertos.bcb.gov.br) | CDI (12), IPCA (433), Selic (432) | consultado direto do celular |
 | B3 COTAHIST | fechamento mensal de todos os ativos, para o histórico | gerado pelo GitHub Actions em `public/data/b3/` |
 | Tesouro Transparente | preço dos títulos do Tesouro Direto | gerado pelo GitHub Actions (o site não aceita chamadas do navegador) |

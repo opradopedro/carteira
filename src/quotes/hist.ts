@@ -31,9 +31,27 @@ export class Historico {
   tesouro: Tesouro | null = null;
   cripto: Cripto | null = null;
 
-  /** Carrega só os anos necessários para os lançamentos existentes. */
+  /** Títulos do Tesouro conhecidos nos arquivos públicos (para casar os nomes do site do Tesouro Direto). */
+  titulosTesouro(): Set<string> { return new Set(Object.keys(this.tesouro?.u ?? {})); }
+
+  /**
+   * Carrega só os anos necessários para os lançamentos existentes. A cada chamada confere se os
+   * arquivos públicos foram regerados (meta.json); se sim, descarta o que mudou e baixa de novo.
+   */
   async load(lancs: Lancamento[]): Promise<void> {
-    this.meta = await getJson<Meta>('meta.json');
+    cache.delete('meta.json');
+    const meta = await getJson<Meta>('meta.json');
+    if (meta && this.meta && meta.geradoEm !== this.meta.geradoEm) {
+      const anos = meta.b3?.anos ?? [];
+      const recentes = new Set(anos.slice(-2)); // anos antigos não mudam
+      for (const k of [...cache.keys()]) {
+        const y = /^b3\/(\d{4})\.json$/.exec(k)?.[1];
+        if (!y || recentes.has(Number(y))) cache.delete(k);
+      }
+      for (const y of recentes) delete this.b3[y];
+      this.tesouro = null; this.cripto = null;
+    }
+    this.meta = meta ?? this.meta;
     const anos = this.meta?.b3?.anos ?? [];
     const primeiro = lancs.reduce((m, l) => (l.d < m ? l.d : m), '9999');
     const y0 = parseInt(primeiro.slice(0, 4), 10);

@@ -286,6 +286,7 @@ document.addEventListener('click', async e => {
   }
   else if (t.id === 'btnOlho') {
     privacidade.oculto = !privacidade.oculto;
+    try { sessionStorage.setItem('oculto', privacidade.oculto ? '1' : '0'); } catch { /* ignora */ }
     atualizarOlho(); rerenderPagina();
   }
   else if (ds.delLanc) {
@@ -532,9 +533,10 @@ async function start() {
   app.setOnChange(render);
   setRenderView(render);
   try { const o = localStorage.getItem('ordemLanc'); if (o) state.ordemLanc = o as typeof state.ordemLanc; } catch { /* ignora */ }
-  // Toda abertura do zero começa com os valores ocultos; voltar do segundo plano mantém como estava.
+  // Abrir o app do zero começa com os valores ocultos. Recarregar a página (ou voltar do
+  // segundo plano) mantém como estava: a escolha fica na sessão, que acaba ao fechar o app.
   privacidade.oculto = true;
-  try { localStorage.removeItem('oculto'); } catch { /* ignora */ }
+  try { const o = sessionStorage.getItem('oculto'); if (o !== null) privacidade.oculto = o === '1'; } catch { /* ignora */ }
   atualizarOlho();
   initNav(location.hash.slice(1));
   renderLancs(); syncForm();

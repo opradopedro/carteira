@@ -6,6 +6,7 @@ export const PREGAO = { abre: 10 * 60, fecha: 18 * 60 };
 /** Intervalo mínimo entre buscas automáticas do mesmo ativo. */
 export const INTERVALO_B3 = 15 * 60_000;   // a brapi gratuita já entrega o preço com atraso
 export const INTERVALO_CRIPTO = 60_000;    // o CoinGecko atualiza mais ou menos a cada minuto
+export const INTERVALO_TD = 30 * 60_000;   // o Tesouro Direto muda o preço poucas vezes por dia (1 consulta para todos)
 /** Plano gratuito da brapi: 15.000 requisições por mês. Acima disto, só pelo botão Atualizar. */
 export const LIMITE_BRAPI = 15_000;
 export const RESERVA_BRAPI = 13_000;
@@ -55,7 +56,7 @@ export type Motivo = 'abrir' | 'pagina' | 'botao' | 'novos';
 export function deveBuscar(tipo: 'b3' | 'cripto', px: Cotacao | undefined, motivo: Motivo, now: Date, usoBrapi = 0): boolean {
   if (px?.fonte === 'manual') return false;
   if (motivo === 'botao') return true;
-  const aoVivo = px && (px.fonte === 'brapi' || px.fonte === 'coingecko');
+  const aoVivo = px && (px.fonte === 'brapi' || px.fonte === 'coingecko' || px.fonte === 'mb');
   const idade = aoVivo ? now.getTime() - Date.parse(px.em) : Infinity;
   if (motivo === 'novos') return !aoVivo || agoraSP(new Date(px.em)).data !== agoraSP(now).data;
   if (tipo === 'cripto') return idade >= INTERVALO_CRIPTO;

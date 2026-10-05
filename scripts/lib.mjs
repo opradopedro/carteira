@@ -193,3 +193,52 @@ export function parseMbDiario(json) {
   });
   return { d, p };
 }
+
+/**
+ * Acrescenta o preço de hoje do site do Tesouro Direto (listas "resgatar" e "investir") aos dados do CSV,
+ * que só chega até o dia útil anterior. Muda `res` (tesouro.json) e `diario` (tesouro-d do ano) no lugar.
+ */
+export function aplicarTesouroHoje(res, diario, listas) {
+  const conhecidos = new Set(Object.keys(res.u));
+  const hoje = {}; // chave -> { d, c, v }
+  for (const lista of listas) {
+    for (const grupo of Object.values(lista || {})) {
+      if (!Array.isArray(grupo)) continue;
+      for (const t of grupo) {
+        if (!t || typeof t.treasuryBondName !== 'string') continue;
+        const d = String(t.lastMarketPricingDate || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+        let k = tesouroKey(t.treasuryBondName);
+        const venc = parseInt(String(t.maturityDate).slice(0, 4), 10);
+        if (!conhecidos.has(k) && venc) {
+          const tipo = t.treasuryBondName.replace(/\s+\d{4}\s*$/, '');
+          const alt = tesouroKey(`${tipo} ${anoNoNome(tipo, venc)}`);
+          if (conhecidos.has(alt)) k = alt;
+        }
+        const o = hoje[k] ||= { d, c: 0, v: 0 };
+        if (t.unitaryInvestmentValue > 0) o.c = t.unitaryInvestmentValue;
+        if (t.unitaryRedemptionValue > 0) o.v = t.unitaryRedemptionValue;
+        if (d > o.d) o.d = d;
+      }
+    }
+  }
+  let n = 0;
+  for (const [k, o] of Object.entries(hoje)) {
+    const pu = o.v || o.c;
+    if (!(pu > 0) || (res.u[k] && res.u[k][1] >= o.d)) continue;
+    n++;
+    res.u[k] = [pu, o.d];
+    if (o.d > res.ultimo) res.ultimo = o.d;
+    const ym = o.d.slice(0, 7);
+    if (!res.m.includes(ym)) { res.m.push(ym); for (const arr of Object.values(res.p)) arr.push(null); }
+    const i = res.m.indexOf(ym);
+    (res.p[k] ||= res.m.map(() => null))[i] = pu;
+    if (diario) {
+      let j = diario.d.indexOf(o.d);
+      if (j < 0) { diario.d.push(o.d); j = diario.d.length - 1; for (const x of [diario.c, diario.v]) for (const arr of Object.values(x)) arr.push(null); }
+      (diario.c[k] ||= diario.d.map(() => null))[j] = o.c || null;
+      (diario.v[k] ||= diario.d.map(() => null))[j] = o.v || null;
+    }
+  }
+  return n;
+}

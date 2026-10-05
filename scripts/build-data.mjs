@@ -16,7 +16,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createCotahistAccumulator, parseMbCandles, parseMbDiario, parseTesouroCsv, tesouroDiario } from './lib.mjs';
+import { aplicarTesouroHoje, createCotahistAccumulator, parseMbCandles, parseMbDiario, parseTesouroCsv, tesouroDiario } from './lib.mjs';
 
 const START_YEAR = 2016;
 // Criptomoedas com histórico no Mercado Bitcoin (também servem de câmbio em trocas cripto x cripto).
@@ -123,8 +123,19 @@ async function tesouro() {
     console.log('Tesouro: baixando CSV…');
     const text = await (await fetchRetry(TESOURO_CSV)).text();
     const res = parseTesouroCsv(text, START_MONTH);
+    const diario = tesouroDiario(text);
+    // O CSV vai só até o dia útil anterior: completa com o preço de hoje do site do Tesouro Direto.
+    try {
+      const td = 'https://www.tesourodireto.com.br/o/rentabilidade/';
+      const ua = { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36', Accept: 'application/json' }, timeout: 30_000 };
+      const listas = await Promise.all(['resgatar', 'investir'].map(p => fetchRetry(td + p, ua, 2).then(r => r.json()).catch(() => null)));
+      const ano = String(new Date().getUTCFullYear());
+      diario[ano] ||= { d: [], c: {}, v: {} };
+      const n = aplicarTesouroHoje(res, diario[ano], listas.filter(Boolean));
+      console.log(`Tesouro Direto (site): ${n} título(s) com preço mais novo que o CSV`);
+    } catch (e) { console.log('Tesouro Direto (site) indisponível:', e.message); }
     writeJson('tesouro.json', res);
-    for (const [ano, dados] of Object.entries(tesouroDiario(text))) if (Number(ano) >= START_YEAR) writeJson(`tesouro-d/${ano}.json`, dados);
+    for (const [ano, dados] of Object.entries(diario)) if (Number(ano) >= START_YEAR) writeJson(`tesouro-d/${ano}.json`, dados);
     console.log(`Tesouro: ${Object.keys(res.p).length} títulos, último dia ${res.ultimo}`);
     return res.ultimo;
   } catch (e) {
