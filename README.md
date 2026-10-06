@@ -1,4 +1,4 @@
-# Minha Carteira
+# FinAI
 
 PWA pessoal para acompanhar investimentos (ações, FIIs, cripto, Tesouro Direto e outros), feito para usar no celular.
 

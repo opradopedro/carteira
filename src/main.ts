@@ -37,7 +37,7 @@ function renderHeader() {
   const page = currentPage();
   $('#btnBack').hidden = !page;
   document.body.classList.toggle('em-pagina', !!page);
-  $('#title').textContent = page ? tituloPagina(page) : 'Minha Carteira';
+  $('#title').textContent = page ? tituloPagina(page) : 'FinAI';
   if (!state.ready) st.textContent = 'Carregando…';
   else if (state.refreshing) st.textContent = 'Atualizando cotações…';
   else if (state.cotEm) st.textContent = (online ? 'Cotações de ' : 'Offline · cotações de ') + fmtQuando(state.cotEm);
@@ -472,7 +472,7 @@ document.addEventListener('focusout', e => {
 
 async function exportBackup() {
   const b = buildBackup(state.lancs, state.precos, app.extrasBackup());
-  const nome = `carteira-backup-${today()}.json`;
+  const nome = `finai-backup-${today()}.json`;
   const file = new File([JSON.stringify(b, null, 1)], nome, { type: 'application/json' });
   try {
     if (navigator.canShare?.({ files: [file] })) {

@@ -62,8 +62,8 @@ export async function cadastrarBiometria(): Promise<void> {
   const cred = await navigator.credentials.create({
     publicKey: {
       challenge: aleatorio(32),
-      rp: { name: 'Minha Carteira', id: location.hostname },
-      user: { id: aleatorio(16), name: 'carteira', displayName: 'Minha Carteira' },
+      rp: { name: 'FinAI', id: location.hostname },
+      user: { id: aleatorio(16), name: 'carteira', displayName: 'FinAI' },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
       attestation: 'none',

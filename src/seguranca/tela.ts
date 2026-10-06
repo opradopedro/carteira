@@ -21,7 +21,7 @@ export function mostrarBloqueio(): Promise<void> {
     el.innerHTML = `
       <div class="lock-box">
         <img src="${import.meta.env.BASE_URL}icons/icon.svg" alt="" width="64" height="64">
-        <h1>Minha Carteira</h1>
+        <h1>FinAI</h1>
         <div class="sub">Desbloqueie para ver seus investimentos.</div>
         ${cfg?.cred ? '<button type="button" class="btn primary lock-bio" id="lockBio">Usar digital ou rosto</button>' : ''}
         <form id="lockForm" autocomplete="off">

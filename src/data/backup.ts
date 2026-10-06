@@ -72,7 +72,7 @@ export function parseBackup(text: string): Backup {
   let o: unknown;
   try { o = JSON.parse(text); } catch { throw new Error('O arquivo não é um JSON válido.'); }
   const b = o as Partial<Backup>;
-  if (!b || b.app !== 'carteira' || !Array.isArray(b.lancs)) throw new Error('Este arquivo não é um backup da Carteira.');
+  if (!b || b.app !== 'carteira' || !Array.isArray(b.lancs)) throw new Error('Este arquivo não é um backup do FinAI.');
   const lancs: Lancamento[] = [];
   for (const l of b.lancs) {
     const ok = l && typeof l.id === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(l.d) && TIPOS.includes(l.t) &&

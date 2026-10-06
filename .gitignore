@@ -8,5 +8,6 @@ dev-dist/
 *.xls
 *.csv
 carteira-backup*.json
+finai-backup*.json
 backup*.json
 *.local.*

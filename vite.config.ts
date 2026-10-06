@@ -17,8 +17,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg', 'icons/icon-192.png'],
       manifest: {
-        name: 'Minha Carteira',
-        short_name: 'Carteira',
+        name: 'FinAI',
+        short_name: 'FinAI',
         description: 'Acompanhamento de investimentos pessoais. Seus dados ficam só no aparelho.',
         lang: 'pt-BR',
         start_url: '.',
