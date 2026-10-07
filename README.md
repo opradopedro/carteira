@@ -8,6 +8,7 @@ PWA pessoal para acompanhar investimentos (ações, FIIs, cripto, Tesouro Direto
 - **Pendências**: tela que lista o que precisa de ação manual (valor de resgate de CDB, ativo sem cotação, posição vendida, backup atrasado).
 - **Preço do dia no lançamento manual**: ao escolher ativo e data, o app preenche o fechamento daquele dia (B3), o PU de compra/venda (Tesouro) ou o fechamento do Mercado Bitcoin (cripto), a partir de arquivos diários publicados com o app.
 - **Cripto paga em dólar ou outra cripto**: o preço é convertido para reais pela cotação do dia (dólar comercial do Banco Central ou fechamento do Mercado Bitcoin); trocar cripto por cripto gera a compra de uma e a venda da outra.
+- **Banco (Open Finance)**: conecta as contas pelo [Meu Pluggy](https://meu.pluggy.ai) (gratuito) e mostra entradas e saídas de verdade, gastos por categoria e transações. Caixinhas, Pix entre contas suas, investimentos e pagamento da fatura são separados e não contam como entrada nem saída. Categoriza pela Pluggy (no período de teste) e por palavras da descrição; dá para corrigir e criar regras para as parecidas. Client ID/Secret ficam só no aparelho.
 - **Segurança**: bloqueio com PIN do app (guardado só como hash PBKDF2) e digital/rosto do celular (WebAuthn, com verificação da assinatura); botão de olho que oculta valores em dinheiro e quantidades, mantendo porcentagens e gráficos; o app sempre abre com os valores ocultos (voltar do segundo plano mantém como estava).
 - **Cotações sob demanda**: Tesouro Direto pelo preço do dia no site do Tesouro (o CSV oficial só chega até o dia útil anterior); cripto ao abrir o app ou entrar numa cripto (no máximo 1x por minuto); ações e FIIs do mesmo jeito, mas só com o pregão aberto e no máximo a cada 15 min por ativo, com contador mensal para não passar do plano gratuito da brapi. O botão Atualizar (no menu lateral) busca tudo.
 - **Cotações**: só os códigos dos ativos saem do aparelho.
@@ -15,6 +16,7 @@ PWA pessoal para acompanhar investimentos (ações, FIIs, cripto, Tesouro Direto
 | Fonte | Uso | Observação |
 |---|---|---|
 | [brapi.dev](https://brapi.dev) | ações, FIIs, ETFs em tempo quase real | token gratuito, informado em Ajustes (fica só no aparelho) |
+| [Pluggy](https://pluggy.ai) (Meu Pluggy) | contas e transações bancárias via Open Finance | consultada direto do celular com as suas credenciais |
 | [CoinGecko](https://www.coingecko.com/en/api) | cripto | chave Demo opcional; se falhar, usa o Mercado Bitcoin |
 | Tesouro Direto (site) | preço do dia dos títulos | lista pública, consultada direto do celular |
 | [BCB SGS](https://dadosabertos.bcb.gov.br) | CDI (12), IPCA (433), Selic (432) | consultado direto do celular |

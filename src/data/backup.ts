@@ -1,6 +1,7 @@
 import type { Classe, Lancamento, Precos, TipoLanc } from '../core/types';
 import type { FiltroSalvo } from '../core/analise';
 import { mergeImport, type AReceber } from '../core/b3';
+import { NATUREZAS, type AjusteTx, type ContaBanco, type Natureza, type RegraBanco, type TxBanco } from '../banco/tipos';
 
 /** O que, além dos lançamentos, vai no backup (versão 2). Tokens de API nunca entram. */
 export interface Extras {
@@ -8,6 +9,8 @@ export interface Extras {
   pendIgnoradas?: string[];
   aReceber?: { em: string; itens: AReceber[] } | null;
   tema?: 'auto' | 'claro' | 'escuro';
+  /** Área Banco: transações e suas correções (as credenciais da Pluggy nunca entram). */
+  banco?: { contas: ContaBanco[]; txs: TxBanco[]; ajustes: Record<string, AjusteTx>; regras: RegraBanco[] };
 }
 
 export interface Backup {
@@ -61,6 +64,22 @@ function lerExtras(e: unknown): Extras {
     out.aReceber = { em: ar.em, itens: ar.itens.filter((i): i is AReceber => !!i && typeof i.a === 'string' && typeof i.d === 'string' && typeof i.tipo === 'string' && Number.isFinite(i.v))
       .map(i => ({ a: i.a, d: i.d, tipo: i.tipo, v: i.v })) };
   if (x.tema === 'auto' || x.tema === 'claro' || x.tema === 'escuro') out.tema = x.tema;
+  const b = x.banco as Record<string, unknown> | undefined;
+  if (b && typeof b === 'object') {
+    const arr = (v: unknown) => (Array.isArray(v) ? v : []);
+    const nat = (v: unknown): Natureza | undefined => (typeof v === 'string' && v in NATUREZAS ? v as Natureza : undefined);
+    const ajuste = (a: Record<string, unknown>): AjusteTx => ({ ...(nat(a?.nat) ? { nat: nat(a.nat) } : {}), ...(typeof a?.cat === 'string' ? { cat: a.cat } : {}) });
+    out.banco = {
+      contas: arr(b.contas).filter((c): c is ContaBanco => !!c && typeof c.id === 'string' && (c.tipo === 'corrente' || c.tipo === 'cartao'))
+        .map(c => ({ id: c.id, item: String(c.item || ''), banco: String(c.banco || 'Banco'), nome: String(c.nome || ''), tipo: c.tipo, saldo: Number(c.saldo) || 0, em: String(c.em || '') })),
+      txs: arr(b.txs).filter((t): t is TxBanco => !!t && typeof t.chave === 'string' && typeof t.conta === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.d) && Number.isFinite(t.v))
+        .map(t => ({ id: String(t.id || t.chave), chave: t.chave, conta: t.conta, d: t.d, desc: String(t.desc || ''), v: t.v,
+          ...(typeof t.catP === 'string' ? { catP: t.catP } : {}), ...(t.mesmaPessoa ? { mesmaPessoa: true } : {}), ...(t.pend ? { pend: true } : {}) })),
+      ajustes: Object.fromEntries(Object.entries((b.ajustes as Record<string, Record<string, unknown>>) || {}).map(([k, a]) => [k, ajuste(a)])),
+      regras: arr(b.regras).filter((r): r is RegraBanco => !!r && typeof r.id === 'string' && typeof r.termo === 'string' && !!r.termo)
+        .map(r => ({ id: r.id, termo: r.termo, ...ajuste(r as unknown as Record<string, unknown>) })),
+    };
+  }
   return out;
 }
 

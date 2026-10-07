@@ -10,6 +10,7 @@ import { cleanTicker, guessClass, newId, parseNum, today } from './core/util';
 import { CRIPTO_NOMES, buscarAtivos, type Sugestao } from './core/busca';
 import { ehCripto, montarLancamentos, type Moeda } from './core/moeda';
 import { CLASSES } from './core/types';
+import type { Natureza } from './banco/tipos';
 import { LIMITE_BRAPI, mercadoAberto } from './core/mercado';
 import { abrirMenu, fecharMenu } from './ui/menu';
 import { $, brl, fmtD, fmtQuando, privacidade, toast } from './ui/fmt';
@@ -17,6 +18,7 @@ import { renderResumo } from './ui/resumo';
 import { renderAtivos } from './ui/ativos';
 import { renderProventos } from './ui/proventos';
 import { renderLancs, setFiltro } from './ui/lancamentos';
+import { renderBanco } from './ui/banco';
 import { renderBadge } from './ui/pendencias';
 import { renderPagina, tituloPagina } from './ui/paginas';
 import * as seg from './seguranca/bloqueio';
@@ -75,6 +77,7 @@ function render() {
   if (nav.tab === 'ativos') renderAtivos();
   if (nav.tab === 'proventos') renderProventos();
   if (nav.tab === 'lancamentos') renderLancs();
+  if (nav.tab === 'banco') renderBanco();
 }
 
 function erroSeg(m: string) { const e = $('#segErr'); e.textContent = m; e.hidden = false; }
@@ -295,6 +298,21 @@ document.addEventListener('click', async e => {
   }
   else if (t.id === 'btnAdd') openForm();
   else if (t.id === 'btnCancel') $('#formPanel').hidden = true;
+  else if (ds.bmes) {
+    const [y, m] = state.banco.mes.split('-').map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + Number(ds.bmes), 1));
+    app.setMesBanco(d.toISOString().slice(0, 7));
+  }
+  else if (t.id === 'btnSincBanco') { if (!navigator.onLine) toast('Sem internet agora.'); else app.sincronizarBanco(); }
+  else if (ds.delRegra) { await app.removerRegra(ds.delRegra); toast('Regra excluída'); }
+  else if (t.id === 'btnBtxAuto') {
+    const tx = state.banco.txs.find(x => x.chave === ($('#formBtx') as HTMLElement).dataset.chave);
+    if (tx) { await app.voltarAutomatico(tx); toast('Voltou à classificação automática'); back(); }
+  }
+  else if (t.id === 'btnDesconectarBanco') {
+    if (ds.armed) { await app.desconectarBanco(); toast('Bancos desconectados'); back(); }
+    else { ds.armed = '1'; t.textContent = 'Toque de novo para confirmar'; }
+  }
   else if (t.id === 'btnMenu') abrirMenu();
   else if (t.id === 'btnMenuFechar') fecharMenu();
   else if (t.id === 'btnRefresh') fecharMenu(() => { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh('botao'); });
@@ -402,6 +420,24 @@ document.addEventListener('submit', async e => {
   const f = e.target as HTMLElement;
   if (f.id === 'form') submitForm(e);
   else if (f.id === 'formEdit') salvarEdicao(e);
+  else if (f.id === 'formPluggy') {
+    e.preventDefault();
+    const itens = $<HTMLTextAreaElement>('#pItens').value.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+    const err = $('#pErr');
+    if (!itens.length) { err.textContent = 'Informe pelo menos um Item ID.'; err.hidden = false; return; }
+    await app.salvarPluggy({ clientId: $<HTMLInputElement>('#pId').value.trim(), clientSecret: $<HTMLInputElement>('#pSecret').value.trim(), itens });
+    setTab('banco'); // fecha esta página e mostra a aba Banco
+    if (navigator.onLine) app.sincronizarBanco(); else toast('Salvo. Sincroniza quando houver internet.');
+  }
+  else if (f.id === 'formBtx') {
+    e.preventDefault();
+    const tx = state.banco.txs.find(x => x.chave === f.dataset.chave);
+    if (!tx) return;
+    const parecidas = !!document.querySelector<HTMLInputElement>('#bParecidas')?.checked;
+    await app.ajustarTx(tx, { nat: $<HTMLSelectElement>('#bNat').value as Natureza, cat: $<HTMLSelectElement>('#bCat').value }, parecidas);
+    toast(parecidas ? 'Regra criada para as parecidas' : 'Transação corrigida');
+    back();
+  }
   else if (f.id === 'cfgForm') {
     e.preventDefault();
     await app.saveConfig({
@@ -527,6 +563,11 @@ window.addEventListener('resize', () => {
 });
 
 document.getElementById('menuFundo')!.addEventListener('click', () => fecharMenu());
+// Tocar numa coluna do gráfico do Banco mostra aquele mês.
+document.addEventListener('click', e => {
+  const m = (e.target as Element).closest?.('[data-bmes-ir]')?.getAttribute('data-bmes-ir');
+  if (m && m !== state.banco.mes) { app.setMesBanco(m); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+});
 
 /* ---------- início ---------- */
 async function start() {
@@ -545,6 +586,7 @@ async function start() {
   await app.init();
   applyTheme();
   render();
+  if (navigator.onLine && app.bancoConfigurado() && Date.now() - Date.parse(state.banco.sinc || '1970-01-01') > 6 * 3600_000) app.sincronizarBanco();
   if (state.lancs.length) {
     if (navigator.onLine) await app.refresh('abrir');
     else await app.loadHist();

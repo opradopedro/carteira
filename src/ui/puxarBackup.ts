@@ -17,6 +17,7 @@ export async function puxarDeArquivo(f: File) {
     x.filtros?.length ? `${x.filtros.length} filtro(s) salvo(s)` : '',
     x.aReceber?.itens.length ? 'proventos a receber' : '',
     Object.keys(b.precosManuais).length ? `${Object.keys(b.precosManuais).length} preço(s) manual(is)` : '',
+    x.banco?.txs.length ? `${x.banco.txs.length} transações do banco` : '',
     x.tema ? 'tema' : '',
   ].filter(Boolean);
   const temAtual = state.lancs.length > 0;
@@ -28,7 +29,7 @@ export async function puxarDeArquivo(f: File) {
       <div><span class="label">Ativos</span><b>${r.ativos}</b></div>
       <div><span class="label">Período</span><b>${r.de ? fmtD(r.de).slice(3) + ' a ' + fmtD(r.ate).slice(3) : '—'}</b></div>
     </div>
-    ${tambem.length ? `<div class="note">Também vem: ${tambem.join(', ')}. Tokens das cotações não vão no backup.</div>` : '<div class="note">Tokens das cotações não vão no backup.</div>'}
+    ${tambem.length ? `<div class="note">Também vem: ${tambem.join(', ')}. Tokens e senhas de acesso não vão no backup.</div>` : '<div class="note">Tokens e senhas de acesso não vão no backup.</div>'}
     ${temAtual ? `<div class="note">Na carteira atual há ${state.lancs.length} lançamentos. ${r.novos ? `<b>${r.novos}</b> do backup ainda não ${r.novos === 1 ? 'está' : 'estão'} aqui.` : 'Tudo o que está no backup já está aqui.'}</div>` : ''}
     <div class="dlg-acoes">
       ${temAtual

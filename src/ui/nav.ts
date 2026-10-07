@@ -2,14 +2,16 @@
 // Cada página aberta vira uma entrada no histórico do navegador, então o botão "voltar"
 // do celular e a seta do topo voltam exatamente para onde você estava (inclusive a rolagem).
 import type { Classe } from '../core/types';
+import type { Natureza } from '../banco/tipos';
 import { hideSheet } from './sheet';
 
-export type Tab = 'resumo' | 'ativos' | 'proventos' | 'lancamentos';
+export type Tab = 'resumo' | 'ativos' | 'proventos' | 'lancamentos' | 'banco';
 export type Page =
   | { k: 'resumo' } | { k: 'rent' } | { k: 'evo' } | { k: 'pend' } | { k: 'ajustes' }
-  | { k: 'classe'; c: Classe } | { k: 'ativo'; a: string } | { k: 'prov'; a?: string; c?: Classe } | { k: 'lanc'; id: string };
+  | { k: 'classe'; c: Classe } | { k: 'ativo'; a: string } | { k: 'prov'; a?: string; c?: Classe } | { k: 'lanc'; id: string }
+  | { k: 'bconf' } | { k: 'bcat'; cat: string } | { k: 'bnat'; nat: Natureza } | { k: 'btx'; chave: string };
 
-export const TABS: Tab[] = ['resumo', 'ativos', 'proventos', 'lancamentos'];
+export const TABS: Tab[] = ['resumo', 'ativos', 'proventos', 'banco', 'lancamentos'];
 
 export const nav = {
   tab: 'resumo' as Tab,
@@ -28,7 +30,10 @@ export const currentPage = (): Page | null => nav.stack.at(-1) ?? null;
 export function parsePage(s: string): Page | null {
   const [k, a, b] = s.split(':');
   switch (k) {
-    case 'resumo': case 'rent': case 'evo': case 'pend': case 'ajustes': return { k };
+    case 'resumo': case 'rent': case 'evo': case 'pend': case 'ajustes': case 'bconf': return { k };
+    case 'bcat': return { k, cat: s.slice(5) };
+    case 'bnat': return { k, nat: a as Natureza };
+    case 'btx': return { k, chave: s.slice(4) };
     case 'classe': return { k, c: a as Classe };
     case 'ativo': return { k, a: s.slice(6) };
     case 'lanc': return { k, id: s.slice(5) };

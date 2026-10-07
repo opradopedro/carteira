@@ -8,6 +8,9 @@ import { isB3Ticker, newId, today, ymd } from './core/util';
 import { INTERVALO_TD, deveBuscar, type Motivo } from './core/mercado';
 import * as db from './data/db';
 import { juntar, type Backup, type Extras } from './data/backup';
+import type { AjusteTx, ConfigPluggy, ContaBanco, RegraBanco, TxBanco } from './banco/tipos';
+import { classificar, termoDe, type Classificada } from './banco/classificar';
+import { sincronizar as sincronizarPluggy } from './banco/pluggy';
 import type { Config, Indices, Uso } from './data/db';
 import { Historico } from './quotes/hist';
 import { refreshIndices, refreshQuotes } from './quotes/live';
@@ -38,6 +41,16 @@ export const state = {
   pendIgnoradas: [] as string[],
   ultimoBackup: '',
   uso: { mes: '', brapi: 0, cg: 0 } as Uso,
+  banco: {
+    contas: [] as ContaBanco[],
+    txs: [] as TxBanco[],
+    ajustes: {} as Record<string, AjusteTx>,
+    regras: [] as RegraBanco[],
+    sinc: '',               // última sincronização
+    sincronizando: false,
+    erros: [] as string[],
+    mes: today().slice(0, 7), // mês mostrado na área Banco
+  },
 };
 
 export const hist = new Historico();
@@ -76,6 +89,8 @@ export async function init() {
   state.ultimoBackup = (await db.getKV('ultimoBackup')) || '';
   state.filtros = (await db.getKV('filtros')) || [];
   state.uso = (await db.getKV('uso')) || state.uso;
+  const [bc, bt, ba, br, bs] = await Promise.all([db.getKV('bancoContas'), db.getKV('bancoTxs'), db.getKV('bancoAjustes'), db.getKV('bancoRegras'), db.getKV('bancoSinc')]);
+  Object.assign(state.banco, { contas: bc || [], txs: bt || [], ajustes: ba || {}, regras: br || [], sinc: bs || '' });
   state.aReceber = aReceber || null;
   state.lancs = lancs;
   state.precos = precos || {};
@@ -276,6 +291,7 @@ export async function puxarBackup(b: Backup, modo: 'juntar' | 'substituir'): Pro
     state.pendIgnoradas = x.pendIgnoradas ?? [];
     state.aReceber = x.aReceber ?? null;
     if (x.tema) state.cfg = { ...state.cfg, tema: x.tema };
+    if (x.banco) Object.assign(state.banco, { contas: x.banco.contas, txs: x.banco.txs, ajustes: x.banco.ajustes, regras: x.banco.regras });
   } else {
     const r = juntar(state.lancs, b.lancs);
     added = r.added.length; dup = r.dup;
@@ -290,11 +306,22 @@ export async function puxarBackup(b: Backup, modo: 'juntar' | 'substituir'): Pro
     state.pendIgnoradas = [...new Set([...state.pendIgnoradas, ...(x.pendIgnoradas ?? [])])];
     if (x.aReceber && (!state.aReceber || x.aReceber.em > state.aReceber.em)) state.aReceber = x.aReceber;
     if (x.tema && !state.cfg.tema) state.cfg = { ...state.cfg, tema: x.tema };
+    if (x.banco) {
+      const b = state.banco;
+      const chaves = new Set(b.txs.map(t => t.chave)), contas = new Set(b.contas.map(c => c.id)), termos = new Set(b.regras.map(r => r.termo));
+      b.txs = [...b.txs, ...x.banco.txs.filter(t => !chaves.has(t.chave))].sort((p, q) => p.d.localeCompare(q.d));
+      b.contas = [...b.contas, ...x.banco.contas.filter(c => !contas.has(c.id))];
+      b.ajustes = { ...x.banco.ajustes, ...b.ajustes };
+      b.regras = [...b.regras, ...x.banco.regras.filter(r => !termos.has(r.termo))];
+    }
   }
   await Promise.all([
     db.setKV('precos', state.precos), db.setKV('filtros', state.filtros), db.setKV('pendIgnoradas', state.pendIgnoradas),
     db.setKV('config', state.cfg), state.aReceber ? db.setKV('aReceber', state.aReceber) : Promise.resolve(),
+    db.setKV('bancoContas', state.banco.contas), db.setKV('bancoTxs', state.banco.txs),
+    db.setKV('bancoAjustes', state.banco.ajustes), db.setKV('bancoRegras', state.banco.regras),
   ]);
+  clsCache = null;
   await hist.load(state.lancs);
   state.histPronto = true;
   recompute(); onChange();
@@ -304,11 +331,15 @@ export async function puxarBackup(b: Backup, modo: 'juntar' | 'substituir'): Pro
 /** Dados que vão no backup além dos lançamentos. */
 export const extrasBackup = (): Extras => ({
   filtros: state.filtros, pendIgnoradas: state.pendIgnoradas, aReceber: state.aReceber, tema: state.cfg.tema,
+  ...(state.banco.txs.length || state.banco.regras.length
+    ? { banco: { contas: state.banco.contas, txs: state.banco.txs, ajustes: state.banco.ajustes, regras: state.banco.regras } } : {}),
 });
 
 export async function wipe() {
   await db.clearAll();
   Object.assign(state, { lancs: [], precos: {}, indices: null, cfg: {}, cotEm: '', falhas: [], avisos: [], aReceber: null, pendIgnoradas: [], ultimoBackup: '' });
+  Object.assign(state.banco, { contas: [], txs: [], ajustes: {}, regras: [], sinc: '', erros: [] });
+  clsCache = null;
   recompute(); onChange();
 }
 
@@ -364,3 +395,100 @@ export async function excluirFiltro(id: string) {
   await db.setKV('filtros', state.filtros);
   onChange();
 }
+
+/* ---------- Banco (Open Finance via Meu Pluggy) ---------- */
+
+let clsCache: Classificada[] | null = null;
+/** Transações do banco já classificadas (receita, despesa, interna…) e com categoria. */
+export function bancoClassificadas(): Classificada[] {
+  return (clsCache ||= classificar(state.banco.txs, { contas: state.banco.contas, ajustes: state.banco.ajustes, regras: state.banco.regras }));
+}
+const mudouBanco = () => { clsCache = null; onChange(); };
+
+export const bancoConfigurado = () => !!(state.cfg.pluggy?.clientId && state.cfg.pluggy.clientSecret && state.cfg.pluggy.itens.length);
+
+export async function salvarPluggy(p: ConfigPluggy) {
+  state.cfg = { ...state.cfg, pluggy: p };
+  await db.setKV('config', state.cfg);
+  onChange();
+}
+
+/**
+ * Busca contas e transações. Na primeira vez, os últimos 12 meses; depois, refaz a janela recente
+ * (o cartão muda transações quando a fatura fecha), mantendo o histórico mais antigo guardado aqui.
+ */
+export async function sincronizarBanco(): Promise<void> {
+  const cfg = state.cfg.pluggy;
+  if (!cfg || state.banco.sincronizando) return;
+  state.banco.sincronizando = true; state.banco.erros = []; onChange();
+  try {
+    const ini = state.banco.sinc
+      ? ymd(new Date(Date.parse(state.banco.sinc) - 45 * 864e5))
+      : ymd(new Date(Date.now() - 365 * 864e5));
+    const r = await sincronizarPluggy(cfg, ini);
+    const lidas = new Set(r.contasLidas);
+    const itens = new Set(cfg.itens);
+    const contas = new Map(state.banco.contas.filter(c => itens.has(c.item)).map(c => [c.id, c]));
+    for (const c of r.contas) contas.set(c.id, c);
+    const txs = [
+      ...state.banco.txs.filter(t => contas.has(t.conta) && !(lidas.has(t.conta) && t.d >= ini)),
+      ...r.txs,
+    ].sort((a, b) => a.d.localeCompare(b.d));
+    Object.assign(state.banco, { contas: [...contas.values()], txs, erros: r.erros });
+    if (r.contasLidas.length) {
+      state.banco.sinc = new Date().toISOString();
+      await db.setKV('bancoSinc', state.banco.sinc);
+    }
+    await Promise.all([db.setKV('bancoContas', state.banco.contas), db.setKV('bancoTxs', state.banco.txs)]);
+  } catch (e) {
+    state.banco.erros = [(e as Error).message || 'Não foi possível sincronizar agora.'];
+  } finally {
+    state.banco.sincronizando = false;
+    mudouBanco();
+  }
+}
+
+/**
+ * Corrige a categoria e/ou o tipo de uma transação. Com `parecidas`, vira regra para todas as
+ * transações com a mesma descrição (sem números), inclusive as que ainda vão chegar.
+ */
+export async function ajustarTx(tx: TxBanco, a: AjusteTx, parecidas: boolean) {
+  if (parecidas) {
+    const termo = termoDe(tx.desc);
+    if (termo) {
+      state.banco.regras = [...state.banco.regras.filter(r => r.termo !== termo), { id: newId(), termo, ...a }];
+      await db.setKV('bancoRegras', state.banco.regras);
+    }
+    // A correção individual antiga desta transação daria conflito com a regra nova.
+    const { [tx.chave]: _, ...resto } = state.banco.ajustes;
+    state.banco.ajustes = resto;
+  } else {
+    state.banco.ajustes = { ...state.banco.ajustes, [tx.chave]: a };
+  }
+  await db.setKV('bancoAjustes', state.banco.ajustes);
+  mudouBanco();
+}
+
+export async function voltarAutomatico(tx: TxBanco) {
+  const { [tx.chave]: _, ...resto } = state.banco.ajustes;
+  state.banco.ajustes = resto;
+  await db.setKV('bancoAjustes', resto);
+  mudouBanco();
+}
+
+export async function removerRegra(id: string) {
+  state.banco.regras = state.banco.regras.filter(r => r.id !== id);
+  await db.setKV('bancoRegras', state.banco.regras);
+  mudouBanco();
+}
+
+/** Remove a conexão e apaga do aparelho as contas e transações (as regras ficam). */
+export async function desconectarBanco() {
+  const { pluggy: _, ...cfg } = state.cfg;
+  state.cfg = cfg;
+  Object.assign(state.banco, { contas: [], txs: [], sinc: '', erros: [] });
+  await Promise.all([db.setKV('config', state.cfg), db.setKV('bancoContas', []), db.setKV('bancoTxs', []), db.setKV('bancoSinc', '')]);
+  mudouBanco();
+}
+
+export function setMesBanco(mes: string) { state.banco.mes = mes; onChange(); }

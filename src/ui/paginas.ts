@@ -1,5 +1,7 @@
 // Páginas de detalhe abertas a partir dos cards e listas.
 import { hist, listaPendencias, model, serie, serieDe, state } from '../app';
+import { paginaCategoria, paginaConexao, paginaNatureza, paginaTx } from './banco';
+import { NATUREZAS } from '../banco/tipos';
 import { comparar, janela, lerPonto, periodRange, proventosPorMes, IBOV_PROXY } from '../core/analise';
 import { cdiAcumulado, periodResult } from '../core/perf';
 import { CLASSES, type Classe, type Cotacao, type Posicao } from '../core/types';
@@ -26,6 +28,10 @@ export function tituloPagina(p: Page): string {
     case 'ativo': return p.a;
     case 'prov': return p.a ? `Proventos · ${p.a}` : p.c ? `Proventos · ${CLASSES[p.c]}` : 'Proventos';
     case 'lanc': return 'Editar lançamento';
+    case 'bconf': return 'Conexão com bancos';
+    case 'bcat': return p.cat;
+    case 'bnat': return NATUREZAS[p.nat];
+    case 'btx': return 'Transação';
   }
 }
 
@@ -41,6 +47,10 @@ export function renderPagina(el: HTMLElement, p: Page) {
     case 'pend': return renderPendencias(el);
     case 'ajustes': return void renderAjustes(el);
     case 'lanc': return paginaLanc(el, p.id);
+    case 'bconf': return paginaConexao(el);
+    case 'bcat': return paginaCategoria(el, p.cat);
+    case 'bnat': return paginaNatureza(el, p.nat);
+    case 'btx': return paginaTx(el, p.chave);
   }
 }
 

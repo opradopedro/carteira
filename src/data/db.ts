@@ -1,4 +1,5 @@
 import { openDB, type IDBPDatabase } from 'idb';
+import type { AjusteTx, ConfigPluggy, ContaBanco, RegraBanco, TxBanco } from '../banco/tipos';
 import type { Lancamento, Precos } from '../core/types';
 import type { SerieDiaria, SerieMensal } from '../core/perf';
 import type { AReceber } from '../core/b3';
@@ -8,6 +9,7 @@ import type { FiltroSalvo } from '../core/analise';
 export interface Config {
   brapiToken?: string;
   cgKey?: string;
+  pluggy?: ConfigPluggy;
   tema?: 'auto' | 'claro' | 'escuro';
 }
 
@@ -28,6 +30,11 @@ interface KV {
   ultimoBackup: string;
   filtros: FiltroSalvo[];
   uso: Uso;
+  bancoContas: ContaBanco[];
+  bancoTxs: TxBanco[];
+  bancoAjustes: Record<string, AjusteTx>;
+  bancoRegras: RegraBanco[];
+  bancoSinc: string;
 }
 
 /** Consultas às APIs no mês (para não estourar o plano gratuito). */
