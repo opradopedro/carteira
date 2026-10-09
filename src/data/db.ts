@@ -38,7 +38,7 @@ interface KV {
 }
 
 /** Consultas às APIs no mês (para não estourar o plano gratuito). */
-export interface Uso { mes: string; brapi: number; cg: number }
+export interface Uso { mes: string; brapi: number; cg: number; cota?: { limite: number; restante: number; em: string } }
 
 let dbp: Promise<IDBPDatabase> | null = null;
 const db = () =>

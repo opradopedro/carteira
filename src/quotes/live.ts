@@ -14,7 +14,7 @@ export interface ResultadoAtualizacao {
   precos: Precos;
   falhas: string[];   // mensagens curtas para o usuário
   avisos: string[];
-  req: { brapi: number; cg: number }; // requisições feitas (para acompanhar o limite gratuito)
+  req: { brapi: number; cg: number; cota?: { limite: number; restante: number } }; // consultas feitas e cota informada pela brapi
   vivos: number;
 }
 
@@ -38,38 +38,58 @@ async function getJson(url: string, headers: Record<string, string> = {}, timeou
   throw erro;
 }
 
-/** Executa tarefas com no máximo `n` em paralelo. */
-async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
-  const queue = [...items];
-  await Promise.all(Array.from({ length: Math.min(n, queue.length) }, async () => {
-    while (queue.length) await fn(queue.shift()!);
-  }));
-}
+const espera = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-/** brapi.dev: plano gratuito aceita 1 ativo por requisição. */
-async function brapi(tickers: string[], token: string, out: Precos, falhas: string[], req: { brapi: number }) {
-  let erroToken = false, limite = false, outros = 0;
-  const naoAchou: string[] = [];
-  await pool(tickers, 4, async t => {
-    if (erroToken || limite) return;
-    req.brapi++;
-    try {
-      const j = await getJson(`https://brapi.dev/api/quote/${encodeURIComponent(t)}`, { Authorization: `Bearer ${token}` });
-      const r = j?.results?.[0];
-      if (r && r.regularMarketPrice > 0) {
-        out[t] = { p: r.regularMarketPrice, em: new Date().toISOString(), fonte: 'brapi', ref: r.regularMarketTime };
-      } else naoAchou.push(t);
-    } catch (e) {
-      const s = (e as { status?: number }).status;
-      if (s === 401 || s === 403) erroToken = true;
-      else if (s === 429 || s === 402) limite = true;
-      else if (s === 404) naoAchou.push(t);
-      else outros++;
+/**
+ * brapi.dev. No plano gratuito: 1 ativo por consulta e 1 consulta por vez (uma segunda consulta
+ * simultânea volta com HTTP 429, o mesmo código da cota esgotada). Por isso as consultas são feitas
+ * uma de cada vez, e um 429 só é tratado como cota esgotada quando a brapi diz que não sobrou nada.
+ */
+async function brapi(tickers: string[], token: string, out: Precos, falhas: string[], req: ResultadoAtualizacao['req']) {
+  let erroToken = false, cotaAcabou = false, outros = 0;
+  const naoAchou: string[] = [], foraDoPlano: string[] = [];
+  for (const t of tickers) {
+    if (erroToken || cotaAcabou) break;
+    for (let tentativa = 0; tentativa < 3; tentativa++) {
+      req.brapi++;
+      let r: Response;
+      try {
+        r = await fetch(`https://brapi.dev/api/quote/${encodeURIComponent(t)}`, {
+          headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(12000), cache: 'no-store',
+        });
+      } catch {
+        if (tentativa < 2) { await espera(1500); continue; }
+        outros++; break;
+      }
+      // Cota do mês informada pela brapi (quando vier com limite na escala mensal).
+      const lim = Number(r.headers.get('X-RateLimit-Limit') ?? r.headers.get('RateLimit-Limit'));
+      const rest = Number(r.headers.get('X-RateLimit-Remaining') ?? r.headers.get('RateLimit-Remaining'));
+      if (lim >= 1000 && Number.isFinite(rest)) req.cota = { limite: lim, restante: rest };
+      if (r.ok) {
+        const j = await r.json().catch(() => null);
+        const q = j?.results?.[0];
+        if (q && q.regularMarketPrice > 0) out[t] = { p: q.regularMarketPrice, em: new Date().toISOString(), fonte: 'brapi', ref: q.regularMarketTime };
+        else naoAchou.push(t);
+        break;
+      }
+      if (r.status === 401) { erroToken = true; break; }
+      if (r.status === 403) { foraDoPlano.push(t); break; }
+      if (r.status === 404) { naoAchou.push(t); break; }
+      if (r.status === 429) {
+        if (lim >= 1000 && rest <= 0) { cotaAcabou = true; break; }
+        // Limite de consultas simultâneas (ex.: o app aberto em dois lugares): espera e tenta de novo.
+        const s = Number(r.headers.get('Retry-After'));
+        if (tentativa < 2) { await espera(Math.min(5, s > 0 ? s : 1.5) * 1000); continue; }
+        outros++; break;
+      }
+      if (r.status >= 500 && tentativa < 2) { await espera(1500); continue; }
+      outros++; break;
     }
-  });
+  }
   if (erroToken) falhas.push('brapi recusou o token. Confira em Ajustes.');
-  if (limite) falhas.push('Limite da brapi atingido; usando o fechamento do último pregão.');
-  if (outros) falhas.push(`brapi não respondeu para ${outros} ativo(s), nem tentando de novo; mostrando o último preço salvo.`);
+  if (cotaAcabou) falhas.push('Acabaram as consultas grátis da brapi deste mês; ações e FIIs usam o fechamento do último pregão até a cota renovar.');
+  if (foraDoPlano.length) falhas.push(`O plano gratuito da brapi não inclui: ${foraDoPlano.join(', ')}. Usando o fechamento do último pregão.`);
+  if (outros) falhas.push(`brapi não respondeu para ${outros} ativo(s), mesmo tentando de novo; mostrando o último preço salvo.`);
   if (naoAchou.length) falhas.push(`brapi não conhece: ${naoAchou.join(', ')}.`);
 }
 
@@ -141,7 +161,7 @@ export async function refreshQuotes(open: Posicao[], antigos: Precos, cfg: Confi
   const precos: Precos = { ...antigos };
   const inicio = new Date().toISOString();
   const falhas: string[] = [], avisos: string[] = [];
-  const req = { brapi: 0, cg: 0 };
+  const req: ResultadoAtualizacao['req'] = { brapi: 0, cg: 0 };
   const manual = (a: string) => antigos[a]?.fonte === 'manual';
 
   // 1) Base: fechamento oficial mais recente (B3 / Tesouro), vindo dos arquivos públicos do app,

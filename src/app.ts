@@ -122,6 +122,14 @@ export type { Motivo };
 
 const ehHoje = (iso?: string) => !!iso && ymd(new Date(iso)) === today();
 const mesAtual = () => today().slice(0, 7);
+/**
+ * Quanto da cota da brapi já foi usado, na escala do plano gratuito (15.000). Usa o número que a
+ * própria brapi informa quando disponível; senão, a contagem feita pelo app.
+ */
+function usoBrapi(): number {
+  const c = state.uso.cota;
+  return c && c.limite > 0 ? (1 - c.restante / c.limite) * 15_000 : state.uso.brapi;
+}
 
 let emCurso: Promise<void> | null = null;
 let ultimaTD = 0; // última consulta ao site do Tesouro Direto nesta sessão
@@ -139,7 +147,7 @@ async function atualizar(motivo: Motivo, so: (p: Posicao) => boolean) {
   const alvo = new Set(model.open.filter(p => so(p) && (
     p.c === 'tesouro' ? tdLivre && state.precos[p.a]?.fonte !== 'manual'
     : p.c === 'cripto' ? deveBuscar('cripto', state.precos[p.a], motivo, agora)
-      : isB3Ticker(p.a) && deveBuscar('b3', state.precos[p.a], motivo, agora, state.uso.brapi)
+      : isB3Ticker(p.a) && deveBuscar('b3', state.precos[p.a], motivo, agora, usoBrapi())
   )).map(p => p.a));
   // Sem nada para buscar ao vivo, ainda aplica o fechamento oficial mais recente (arquivos do app).
   const vaiARede = alvo.size > 0;
@@ -152,7 +160,8 @@ async function atualizar(motivo: Motivo, so: (p: Posicao) => boolean) {
     const r = await refreshQuotes(model.open, state.precos, state.cfg, hist, a => alvo.has(a));
     state.precos = r.precos;
     if (vaiARede) { state.falhas = r.falhas; state.avisos = r.avisos; }
-    state.uso = { ...state.uso, brapi: state.uso.brapi + r.req.brapi, cg: state.uso.cg + r.req.cg };
+    state.uso = { ...state.uso, brapi: state.uso.brapi + r.req.brapi, cg: state.uso.cg + r.req.cg,
+      ...(r.req.cota ? { cota: { ...r.req.cota, em: new Date().toISOString() } } : {}) };
     if (r.vivos) state.cotEm = new Date().toISOString();
     await Promise.all([db.setKV('precos', state.precos), db.setKV('cotEm', state.cotEm), db.setKV('uso', state.uso)]);
     if (motivo !== 'pagina') await atualizarIndices(motivo === 'botao');

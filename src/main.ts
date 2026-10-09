@@ -48,11 +48,14 @@ function renderHeader() {
   ($('#btnRefresh') as HTMLButtonElement).disabled = state.refreshing;
   $('#menuStatus').textContent = state.refreshing ? 'Atualizando…' : state.cotEm ? 'Última: ' + fmtQuando(state.cotEm) : 'Busca tudo agora';
   const usoB = state.uso.mes === today().slice(0, 7) ? state.uso.brapi : 0;
+  const cota = state.uso.cota;
   $('#menuNota').innerHTML = (mercadoAberto(new Date())
     ? 'Pregão aberto: ações e FIIs atualizam sozinhos ao abrir o app ou entrar no ativo (no máximo a cada 15 min).'
     : 'Pregão fechado: ações e FIIs mostram o último preço; voltam a atualizar sozinhos das 10h às 18h em dias úteis.')
     + ' Cripto atualiza sempre que você abre o app.'
-    + (state.cfg.brapiToken ? `<br>brapi este mês: ${usoB.toLocaleString('pt-BR')} de ${LIMITE_BRAPI.toLocaleString('pt-BR')} consultas grátis.` : '');
+    + (!state.cfg.brapiToken ? ''
+      : cota ? `<br>brapi: restam ${cota.restante.toLocaleString('pt-BR')} de ${cota.limite.toLocaleString('pt-BR')} consultas (informado pela brapi).`
+      : `<br>brapi este mês: ${usoB.toLocaleString('pt-BR')} de ${LIMITE_BRAPI.toLocaleString('pt-BR')} consultas grátis.`);
 
   const msgs: string[] = [];
   if (state.ready && !online && state.lancs.length) msgs.push('Sem internet: mostrando as últimas cotações salvas.');
