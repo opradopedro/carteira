@@ -1,6 +1,6 @@
 // Área Banco: entradas e saídas de verdade (sem a caixinha e as transferências entre suas contas),
 // gastos por categoria e as transações do mês, vindas do Open Finance pelo Meu Pluggy.
-import { bancoClassificadas, bancoConfigurado, state } from '../app';
+import { bancoClassificadas, bancoConfigurado, githubConfigurado, pluggyConfigurado, state } from '../app';
 import { CATEGORIAS, CATS_RECEITA, resumoMes, serieMeses, termoDe, type Classificada } from '../banco/classificar';
 import { NATUREZAS, type Natureza } from '../banco/tipos';
 import { $, brl, compact, esc, fmtD, fmtNum, fmtQuando, fmtYm, MES } from './fmt';
@@ -26,8 +26,8 @@ export function itemTx(x: Classificada) {
 function painelConectar() {
   return `<div class="panel">
     <h2>Conecte seus bancos</h2>
-    <div class="sub">Veja entradas e saídas de verdade, para onde vai cada real e gastos por categoria. A conexão é pelo
-      <b>Open Finance</b>, usando o <b>Meu Pluggy</b> (gratuito): você autoriza no app do banco e o FinAI lê as transações direto da Pluggy para este celular.</div>
+    <div class="sub">Veja entradas e saídas de verdade, para onde vai cada real e gastos por categoria. As transações chegam pelo
+      <b>Open Finance</b>: por uma rotina diária do Claude (com o conector do seu banco) que grava num repositório privado seu, por um arquivo que você importa, ou pelo Meu Pluggy.</div>
     <div class="sub">O dinheiro que você só muda de lugar (caixinha, outra conta sua, investimento, pagamento da fatura) é separado e <b>não conta como entrada nem saída</b>.</div>
     <div class="row"><button type="button" class="btn primary" data-page="bconf">Conectar</button></div>
   </div>`;
@@ -103,12 +103,12 @@ export function renderBanco() {
   </div>
 
   <div class="panel">
-    <div class="row between"><h2>Contas</h2><button type="button" class="btn small" id="btnSincBanco"${b.sincronizando ? ' disabled' : ''}>${b.sincronizando ? 'Sincronizando…' : 'Sincronizar'}</button></div>
+    <div class="row between"><h2>Contas</h2>${pluggyConfigurado() || githubConfigurado() ? `<button type="button" class="btn small" id="btnSincBanco"${b.sincronizando ? ' disabled' : ''}>${b.sincronizando ? 'Sincronizando…' : 'Sincronizar'}</button>` : ''}</div>
     ${b.erros.length ? `<div class="err">${b.erros.map(esc).join('<br>')}</div>` : ''}
     <div class="list">${b.contas.map(c => `<div class="item"><div class="name">${esc(c.banco)} <span class="tag" style="color:var(--muted)">${c.tipo === 'cartao' ? 'cartão' : 'conta'}</span></div>
       <div class="val">${brl.format(c.saldo)}</div><div class="meta">${esc(c.nome)}</div>
       <div class="meta r">${c.tipo === 'cartao' ? 'fatura atual' + (c.limite ? ' · limite ' + brl.format(c.limite) : '') : 'saldo'}</div></div>`).join('') || '<div class="empty">Nenhuma conta lida ainda. Toque em Sincronizar.</div>'}</div>
-    <div class="note">${b.sinc ? 'Última sincronização: ' + fmtQuando(b.sinc) + '. ' : ''}A Pluggy atualiza as conexões uma vez por dia.</div>
+    <div class="note">${b.sinc ? 'Última sincronização: ' + fmtQuando(b.sinc) + '. ' : ''}${githubConfigurado() ? 'A rotina grava um arquivo por dia; o FinAI lê os novos ao abrir.' : pluggyConfigurado() ? 'A Pluggy atualiza as conexões uma vez por dia.' : ''}</div>
   </div>
 
   <div class="panel">
@@ -177,28 +177,85 @@ export function paginaTx(el: HTMLElement, chave: string) {
   </div>`;
 }
 
+/** Texto da rotina diária do Claude: lê o conector do banco e grava o arquivo no repositório privado. */
+export function textoRotina(repo: string, pasta: string) {
+  return `Você é a rotina diária do FinAI. Objetivo: copiar minhas transações bancárias recentes para o repositório privado ${repo || 'SEU-USUARIO/finai-dados'}.
+
+1. Use o conector do banco (Open Finance) para listar minhas contas (conta corrente e cartões de crédito), com o saldo atual (no cartão, o valor da fatura em aberto), e as transações dos últimos 5 dias de cada uma, incluindo hoje.
+
+2. Crie o arquivo ${pasta || 'banco'}/AAAA-MM-DD.json (data de hoje, horário de Brasília) exatamente neste formato:
+{
+  "formato": "finai-banco/1",
+  "geradoEm": "<data e hora agora, ISO 8601 com -03:00>",
+  "contas": [
+    { "id": "mercadopago-conta", "banco": "Mercado Pago", "nome": "Conta", "tipo": "corrente", "saldo": 0.00 },
+    { "id": "nubank-cartao", "banco": "Nubank", "nome": "Cartão", "tipo": "cartao", "saldo": 0.00 }
+  ],
+  "transacoes": [
+    { "conta": "mercadopago-conta", "data": "AAAA-MM-DD", "descricao": "texto do banco", "valor": -12.34, "id": "id do banco, se houver" }
+  ]
+}
+
+Regras:
+- Copie data, descrição e valor exatamente como o conector devolveu. Não arredonde, não resuma, não traduza, não junte e não omita transações.
+- valor negativo = dinheiro saindo ou compra no cartão; positivo = entrada, estorno ou pagamento recebido no cartão.
+- "conta" usa o "id" da lista de contas. Mantenha sempre os mesmos ids (ex.: mercadopago-conta, nubank-cartao, rico-cartao).
+- Inclua "id" quando o conector der um identificador da transação; se não der, omita o campo.
+
+3. Antes de gravar, confira com um script Python que o JSON é válido e que a quantidade de transações de cada conta é igual à que o conector devolveu. Se não bater, corrija antes de gravar.
+
+4. Faça commit e push direto na branch main com a mensagem "banco AAAA-MM-DD".
+
+Se o conector falhar ou pedir nova autorização, não crie arquivo: termine explicando o erro.`;
+}
+
 export function paginaConexao(el: HTMLElement) {
-  const p = state.cfg.pluggy;
+  const p = state.cfg.pluggy, g = state.cfg.github;
+  const repo = g?.repo || '', pasta = g?.pasta || 'banco';
   el.innerHTML = `<div class="panel">
-    <h2>Como conectar (uma vez só)</h2>
+    <h2>Rotina diária do Claude</h2>
+    <div class="sub">Todo dia, uma rotina do Claude lê suas transações pelo conector do banco e grava um arquivo num repositório <b>privado</b> seu no GitHub. O FinAI lê esses arquivos.</div>
     <ol class="passos">
-      <li>Crie sua conta grátis no <a href="https://meu.pluggy.ai" target="_blank" rel="noopener">Meu Pluggy</a> e conecte o Mercado Pago (e outros bancos). A autorização é feita no app do próprio banco, pelo Open Finance.</li>
-      <li>Crie uma conta no <a href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">Dashboard da Pluggy</a>. Isso abre um teste de 15 dias: faça os passos 3 e 4 dentro dele.</li>
-      <li>No Dashboard, abra a aplicação de demonstração (“Ir para Demo”) e conecte nela as contas do Meu Pluggy.</li>
-      <li>Copie o <b>Client ID</b> e o <b>Client Secret</b> da aplicação e o <b>Item ID</b> de cada banco (menu ⋮ → “Copiar Item ID”). Cole abaixo.</li>
+      <li>Crie um repositório <b>privado</b> no GitHub, por exemplo <code>finai-dados</code>, e instale nele o app do Claude no GitHub.</li>
+      <li>No claude.ai, adicione o conector do seu banco (ex.: <code>https://mcp.cumbuca.com/mcp</code>) e faça a autorização do Open Finance numa conversa.</li>
+      <li>Em claude.ai/code → Rotinas, crie uma rotina diária no repositório <code>finai-dados</code>, com o conector do banco, e cole o texto abaixo.</li>
+      <li>No GitHub, gere um token <b>fine-grained</b> com acesso só ao <code>finai-dados</code> e permissão <b>Contents: Read-only</b>. Cole abaixo.</li>
     </ol>
-    <div class="note">Client ID e Secret ficam só neste celular e não vão no backup. As transações vão da Pluggy direto para cá. A categorização da Pluggy só vem no período de teste; depois, o FinAI categoriza pelas palavras da descrição e pelas suas correções.</div>
+    <form id="formGithub" autocomplete="off">
+      <div class="field"><label for="gRepo">Repositório</label><input id="gRepo" value="${esc(repo)}" placeholder="usuario/finai-dados" spellcheck="false" autocapitalize="off" required></div>
+      <div class="field"><label for="gPasta">Pasta</label><input id="gPasta" value="${esc(pasta)}" spellcheck="false" autocapitalize="off" required></div>
+      <div class="field full"><label for="gToken">Token (só leitura)</label><input id="gToken" type="password" value="${esc(g?.token || '')}" spellcheck="false" autocapitalize="off" required></div>
+      <div class="row full"><button class="btn primary" type="submit">Salvar e sincronizar</button></div>
+      <div class="err full" id="gErr" hidden></div>
+    </form>
+    <details class="rotina"><summary>Texto da rotina (para colar no Claude)</summary>
+      <textarea id="txtRotina" rows="12" readonly>${esc(textoRotina(repo, pasta))}</textarea>
+      <div class="row"><button type="button" class="btn small" id="btnCopiarRotina">Copiar texto</button></div>
+    </details>
+    <div class="note">O token fica só neste celular e não vai no backup. Os arquivos ficam no seu repositório privado; o repositório público do FinAI nunca recebe dados seus.</div>
   </div>
+
   <div class="panel">
-    <h2>Credenciais</h2>
+    <h2>Importar arquivo</h2>
+    <div class="sub">Um arquivo no mesmo formato da rotina. Dá para pedir ao Claude no chat, com o conector do banco: “gere o arquivo do FinAI com minhas transações de setembro”, usando o texto da rotina como modelo. Reimportar não duplica.</div>
+    <div class="row"><label class="btn" for="fileBancoArq">Escolher arquivo .json<input type="file" id="fileBancoArq" accept=".json,application/json" multiple></label></div>
+  </div>
+
+  <details class="panel"><summary><b>Outra opção: Meu Pluggy</b></summary>
+    <ol class="passos">
+      <li>Crie sua conta grátis no <a href="https://meu.pluggy.ai" target="_blank" rel="noopener">Meu Pluggy</a> e conecte seus bancos.</li>
+      <li>Crie uma conta no <a href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">Dashboard da Pluggy</a> (teste de 15 dias), abra a aplicação de demonstração e conecte nela as contas do Meu Pluggy.</li>
+      <li>Copie o Client ID, o Client Secret e o Item ID de cada banco e cole abaixo.</li>
+    </ol>
     <form id="formPluggy" autocomplete="off">
       <div class="field full"><label for="pId">Client ID</label><input id="pId" value="${esc(p?.clientId || '')}" spellcheck="false" autocapitalize="off" required></div>
       <div class="field full"><label for="pSecret">Client Secret</label><input id="pSecret" type="password" value="${esc(p?.clientSecret || '')}" spellcheck="false" autocapitalize="off" required></div>
-      <div class="field full"><label for="pItens">Item IDs (um por linha, um por banco)</label><textarea id="pItens" rows="3" spellcheck="false" autocapitalize="off" required>${esc((p?.itens || []).join('\n'))}</textarea></div>
+      <div class="field full"><label for="pItens">Item IDs (um por linha)</label><textarea id="pItens" rows="3" spellcheck="false" autocapitalize="off" required>${esc((p?.itens || []).join('\n'))}</textarea></div>
       <div class="row full"><button class="btn primary" type="submit">Salvar e sincronizar</button></div>
       <div class="err full" id="pErr" hidden></div>
     </form>
-  </div>
+  </details>
+
   <div class="panel">
     <h2>Suas regras</h2>
     <div class="sub">Criadas quando você corrige uma transação e marca “aplicar a todas”.</div>
@@ -206,5 +263,5 @@ export function paginaConexao(el: HTMLElement) {
       <div class="val"><button type="button" class="btn small" data-del-regra="${esc(r.id)}">Excluir</button></div>
       <div class="meta">${[r.nat ? NATUREZAS[r.nat] : '', r.cat || ''].filter(Boolean).join(' · ')}</div><div class="meta r"></div></div>`).join('') || '<div class="empty">Nenhuma regra ainda.</div>'}</div>
   </div>
-  ${p ? `<div class="row"><button type="button" class="btn" id="btnDesconectarBanco">Desconectar e apagar transações deste aparelho</button></div>` : ''}`;
+  ${p || g || state.banco.txs.length ? `<div class="row"><button type="button" class="btn" id="btnDesconectarBanco">Desconectar e apagar transações deste aparelho</button></div>` : ''}`;
 }

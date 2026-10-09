@@ -1,5 +1,6 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { AjusteTx, ConfigPluggy, ContaBanco, RegraBanco, TxBanco } from '../banco/tipos';
+import type { ConfigGithub } from '../banco/github';
 import type { Lancamento, Precos } from '../core/types';
 import type { SerieDiaria, SerieMensal } from '../core/perf';
 import type { AReceber } from '../core/b3';
@@ -10,6 +11,7 @@ export interface Config {
   brapiToken?: string;
   cgKey?: string;
   pluggy?: ConfigPluggy;
+  github?: ConfigGithub;
   tema?: 'auto' | 'claro' | 'escuro';
 }
 
@@ -35,6 +37,7 @@ interface KV {
   bancoAjustes: Record<string, AjusteTx>;
   bancoRegras: RegraBanco[];
   bancoSinc: string;
+  bancoLidos: Record<string, string>;
 }
 
 /** Consultas às APIs no mês (para não estourar o plano gratuito). */

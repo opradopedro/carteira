@@ -249,3 +249,7 @@ body.bloqueado > :not(#lock), body.coberto > :not(#lock){filter:blur(22px);point
 .check{display:flex;gap:10px;align-items:flex-start;font-size:14px}
 .check input{width:auto;min-height:0;margin-top:3px}
 textarea{resize:vertical;font-family:ui-monospace,monospace;font-size:13px}
+details.rotina summary, details.panel summary{cursor:pointer;color:var(--accent);font-weight:600;padding:4px 0}
+details.panel[open] summary{margin-bottom:8px}
+details.rotina textarea{margin-top:8px;font-size:12px}
+.passos code, .sub code{font-size:12.5px;background:var(--soft);border-radius:5px;padding:1px 5px;overflow-wrap:anywhere}

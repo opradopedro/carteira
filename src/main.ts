@@ -306,6 +306,11 @@ document.addEventListener('click', async e => {
     const d = new Date(Date.UTC(y, m - 1 + Number(ds.bmes), 1));
     app.setMesBanco(d.toISOString().slice(0, 7));
   }
+  else if (t.id === 'btnCopiarRotina') {
+    const txt = $<HTMLTextAreaElement>('#txtRotina').value;
+    try { await navigator.clipboard.writeText(txt); toast('Texto copiado'); }
+    catch { $<HTMLTextAreaElement>('#txtRotina').select(); toast('Selecionei o texto: copie pelo menu do celular.'); }
+  }
   else if (t.id === 'btnSincBanco') { if (!navigator.onLine) toast('Sem internet agora.'); else app.sincronizarBanco(); }
   else if (ds.delRegra) { await app.removerRegra(ds.delRegra); toast('Regra excluída'); }
   else if (t.id === 'btnBtxAuto') {
@@ -423,6 +428,15 @@ document.addEventListener('submit', async e => {
   const f = e.target as HTMLElement;
   if (f.id === 'form') submitForm(e);
   else if (f.id === 'formEdit') salvarEdicao(e);
+  else if (f.id === 'formGithub') {
+    e.preventDefault();
+    const repo = $<HTMLInputElement>('#gRepo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$|\/+$/g, '');
+    const err = $('#gErr');
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { err.textContent = 'Use o formato usuario/repositorio.'; err.hidden = false; return; }
+    await app.salvarGithub({ repo, pasta: $<HTMLInputElement>('#gPasta').value.trim() || 'banco', token: $<HTMLInputElement>('#gToken').value.trim() });
+    setTab('banco');
+    if (navigator.onLine) app.sincronizarBanco(); else toast('Salvo. Sincroniza quando houver internet.');
+  }
   else if (f.id === 'formPluggy') {
     e.preventDefault();
     const itens = $<HTMLTextAreaElement>('#pItens').value.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
@@ -483,6 +497,17 @@ document.addEventListener('change', async e => {
     } catch {
       msg.textContent = 'Não foi possível importar. Tente de novo.';
     }
+  }
+  else if (el.id === 'fileBancoArq') {
+    const files = [...(el.files || [])]; el.value = '';
+    const linhas: string[] = [];
+    for (const f of files) {
+      try {
+        const r = await app.importarArquivoBanco(await f.text());
+        linhas.push(`${f.name}: ${r.novas} transaç${r.novas === 1 ? 'ão nova' : 'ões novas'}.`, ...r.avisos);
+      } catch (err) { linhas.push(`${f.name}: ${(err as Error).message}`); }
+    }
+    toast(linhas.join(' '));
   }
   else if (el.dataset.backup !== undefined) {
     const f = el.files?.[0]; el.value = '';
@@ -589,7 +614,9 @@ async function start() {
   await app.init();
   applyTheme();
   render();
-  if (navigator.onLine && app.bancoConfigurado() && Date.now() - Date.parse(state.banco.sinc || '1970-01-01') > 6 * 3600_000) app.sincronizarBanco();
+  // Banco: arquivos da rotina no máximo a cada 1 h; Pluggy a cada 6 h.
+  const intervaloBanco = app.githubConfigurado() ? 3600_000 : 6 * 3600_000;
+  if (navigator.onLine && Date.now() - Date.parse(state.banco.sinc || '1970-01-01') > intervaloBanco) app.sincronizarBanco();
   if (state.lancs.length) {
     if (navigator.onLine) await app.refresh('abrir');
     else await app.loadHist();

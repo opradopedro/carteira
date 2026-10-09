@@ -11,6 +11,8 @@ import { juntar, type Backup, type Extras } from './data/backup';
 import type { AjusteTx, ConfigPluggy, ContaBanco, RegraBanco, TxBanco } from './banco/tipos';
 import { classificar, termoDe, type Classificada } from './banco/classificar';
 import { sincronizar as sincronizarPluggy } from './banco/pluggy';
+import { baixarArquivo, listarArquivos, type ConfigGithub } from './banco/github';
+import { ORIGEM_ARQUIVO, juntarArquivo, lerArquivoBanco } from './banco/arquivo';
 import type { Config, Indices, Uso } from './data/db';
 import { Historico } from './quotes/hist';
 import { refreshIndices, refreshQuotes } from './quotes/live';
@@ -47,6 +49,7 @@ export const state = {
     ajustes: {} as Record<string, AjusteTx>,
     regras: [] as RegraBanco[],
     sinc: '',               // última sincronização
+    lidos: {} as Record<string, string>, // arquivos do GitHub já lidos (caminho -> sha)
     sincronizando: false,
     erros: [] as string[],
     mes: today().slice(0, 7), // mês mostrado na área Banco
@@ -89,8 +92,8 @@ export async function init() {
   state.ultimoBackup = (await db.getKV('ultimoBackup')) || '';
   state.filtros = (await db.getKV('filtros')) || [];
   state.uso = (await db.getKV('uso')) || state.uso;
-  const [bc, bt, ba, br, bs] = await Promise.all([db.getKV('bancoContas'), db.getKV('bancoTxs'), db.getKV('bancoAjustes'), db.getKV('bancoRegras'), db.getKV('bancoSinc')]);
-  Object.assign(state.banco, { contas: bc || [], txs: bt || [], ajustes: ba || {}, regras: br || [], sinc: bs || '' });
+  const [bc, bt, ba, br, bs, bl] = await Promise.all([db.getKV('bancoContas'), db.getKV('bancoTxs'), db.getKV('bancoAjustes'), db.getKV('bancoRegras'), db.getKV('bancoSinc'), db.getKV('bancoLidos')]);
+  Object.assign(state.banco, { contas: bc || [], txs: bt || [], ajustes: ba || {}, regras: br || [], sinc: bs || '', lidos: bl || {} });
   state.aReceber = aReceber || null;
   state.lancs = lancs;
   state.precos = precos || {};
@@ -347,7 +350,7 @@ export const extrasBackup = (): Extras => ({
 export async function wipe() {
   await db.clearAll();
   Object.assign(state, { lancs: [], precos: {}, indices: null, cfg: {}, cotEm: '', falhas: [], avisos: [], aReceber: null, pendIgnoradas: [], ultimoBackup: '' });
-  Object.assign(state.banco, { contas: [], txs: [], ajustes: {}, regras: [], sinc: '', erros: [] });
+  Object.assign(state.banco, { contas: [], txs: [], ajustes: {}, regras: [], sinc: '', erros: [], lidos: {} });
   clsCache = null;
   recompute(); onChange();
 }
@@ -414,7 +417,46 @@ export function bancoClassificadas(): Classificada[] {
 }
 const mudouBanco = () => { clsCache = null; onChange(); };
 
-export const bancoConfigurado = () => !!(state.cfg.pluggy?.clientId && state.cfg.pluggy.clientSecret && state.cfg.pluggy.itens.length);
+export const pluggyConfigurado = () => !!(state.cfg.pluggy?.clientId && state.cfg.pluggy.clientSecret && state.cfg.pluggy.itens.length);
+export const githubConfigurado = () => !!(state.cfg.github?.repo && state.cfg.github.token);
+/** Há alguma fonte de dados do banco (conexão automática ou arquivos já importados). */
+export const bancoConfigurado = () => pluggyConfigurado() || githubConfigurado() || state.banco.txs.length > 0;
+
+export async function salvarGithub(g: ConfigGithub) {
+  state.cfg = { ...state.cfg, github: g };
+  await db.setKV('config', state.cfg);
+  onChange();
+}
+
+/** Importa um arquivo finai-banco/1 (da rotina ou pedido ao Claude no chat). Devolve quantas transações eram novas. */
+export async function importarArquivoBanco(texto: string): Promise<{ novas: number; avisos: string[] }> {
+  const lido = lerArquivoBanco(texto);
+  const r = juntarArquivo(state.banco.contas, state.banco.txs, lido);
+  Object.assign(state.banco, { contas: r.contas, txs: r.txs });
+  await Promise.all([db.setKV('bancoContas', r.contas), db.setKV('bancoTxs', r.txs)]);
+  mudouBanco();
+  return { novas: r.novas, avisos: lido.avisos };
+}
+
+/** Lê os arquivos novos (ou alterados) da pasta do GitHub. */
+async function sincronizarGithub(cfg: ConfigGithub): Promise<string[]> {
+  const erros: string[] = [];
+  const arquivos = await listarArquivos(cfg);
+  let contas = state.banco.contas, txs = state.banco.txs;
+  const lidos = { ...state.banco.lidos };
+  for (const a of arquivos) {
+    if (lidos[a.path] === a.sha) continue;
+    try {
+      const lido = lerArquivoBanco(await baixarArquivo(cfg, a.path));
+      ({ contas, txs } = juntarArquivo(contas, txs, lido));
+      lidos[a.path] = a.sha;
+      erros.push(...lido.avisos.map(x => `${a.path}: ${x}`));
+    } catch (e) { erros.push(`${a.path}: ${(e as Error).message}`); }
+  }
+  Object.assign(state.banco, { contas, txs, lidos });
+  await Promise.all([db.setKV('bancoContas', contas), db.setKV('bancoTxs', txs), db.setKV('bancoLidos', lidos)]);
+  return erros;
+}
 
 export async function salvarPluggy(p: ConfigPluggy) {
   state.cfg = { ...state.cfg, pluggy: p };
@@ -427,34 +469,47 @@ export async function salvarPluggy(p: ConfigPluggy) {
  * (o cartão muda transações quando a fatura fecha), mantendo o histórico mais antigo guardado aqui.
  */
 export async function sincronizarBanco(): Promise<void> {
-  const cfg = state.cfg.pluggy;
-  if (!cfg || state.banco.sincronizando) return;
+  if (state.banco.sincronizando || (!pluggyConfigurado() && !githubConfigurado())) return;
   state.banco.sincronizando = true; state.banco.erros = []; onChange();
-  try {
-    const ini = state.banco.sinc
-      ? ymd(new Date(Date.parse(state.banco.sinc) - 45 * 864e5))
-      : ymd(new Date(Date.now() - 365 * 864e5));
-    const r = await sincronizarPluggy(cfg, ini);
-    const lidas = new Set(r.contasLidas);
-    const itens = new Set(cfg.itens);
-    const contas = new Map(state.banco.contas.filter(c => itens.has(c.item)).map(c => [c.id, c]));
-    for (const c of r.contas) contas.set(c.id, c);
-    const txs = [
-      ...state.banco.txs.filter(t => contas.has(t.conta) && !(lidas.has(t.conta) && t.d >= ini)),
-      ...r.txs,
-    ].sort((a, b) => a.d.localeCompare(b.d));
-    Object.assign(state.banco, { contas: [...contas.values()], txs, erros: r.erros });
-    if (r.contasLidas.length) {
-      state.banco.sinc = new Date().toISOString();
-      await db.setKV('bancoSinc', state.banco.sinc);
-    }
-    await Promise.all([db.setKV('bancoContas', state.banco.contas), db.setKV('bancoTxs', state.banco.txs)]);
-  } catch (e) {
-    state.banco.erros = [(e as Error).message || 'Não foi possível sincronizar agora.'];
-  } finally {
-    state.banco.sincronizando = false;
-    mudouBanco();
+  const erros: string[] = [];
+  let ok = false;
+  if (githubConfigurado()) {
+    try { erros.push(...await sincronizarGithub(state.cfg.github!)); ok = true; }
+    catch (e) { erros.push((e as Error).message); }
   }
+  if (pluggyConfigurado()) {
+    try { erros.push(...await sincronizarComPluggy(state.cfg.pluggy!)); ok = true; }
+    catch (e) { erros.push((e as Error).message || 'Não foi possível sincronizar com a Pluggy agora.'); }
+  }
+  if (ok) { state.banco.sinc = new Date().toISOString(); await db.setKV('bancoSinc', state.banco.sinc); }
+  state.banco.erros = erros;
+  state.banco.sincronizando = false;
+  mudouBanco();
+}
+
+/**
+ * Busca contas e transações na Pluggy. Na primeira vez, os últimos 12 meses; depois, refaz a janela
+ * recente (o cartão muda transações quando a fatura fecha), mantendo o histórico mais antigo guardado aqui.
+ */
+async function sincronizarComPluggy(cfg: ConfigPluggy): Promise<string[]> {
+  const temPluggy = state.banco.contas.some(c => c.item !== ORIGEM_ARQUIVO);
+  const ini = state.banco.sinc && temPluggy
+    ? ymd(new Date(Date.parse(state.banco.sinc) - 45 * 864e5))
+    : ymd(new Date(Date.now() - 365 * 864e5));
+  const r = await sincronizarPluggy(cfg, ini);
+  const lidas = new Set(r.contasLidas);
+  const itens = new Set(cfg.itens);
+  // Contas vindas de arquivo ficam; contas de conexões que saíram da configuração saem.
+  const contas = new Map(state.banco.contas.filter(c => c.item === ORIGEM_ARQUIVO || itens.has(c.item)).map(c => [c.id, c]));
+  for (const c of r.contas) contas.set(c.id, c);
+  const txs = [
+    ...state.banco.txs.filter(t => contas.has(t.conta) && !(lidas.has(t.conta) && t.d >= ini)),
+    ...r.txs,
+  ].sort((a, b) => a.d.localeCompare(b.d));
+  Object.assign(state.banco, { contas: [...contas.values()], txs });
+  await Promise.all([db.setKV('bancoContas', state.banco.contas), db.setKV('bancoTxs', state.banco.txs)]);
+  if (!r.contasLidas.length && !r.erros.length) return ['A Pluggy não devolveu nenhuma conta.'];
+  return r.erros;
 }
 
 /**
@@ -493,10 +548,10 @@ export async function removerRegra(id: string) {
 
 /** Remove a conexão e apaga do aparelho as contas e transações (as regras ficam). */
 export async function desconectarBanco() {
-  const { pluggy: _, ...cfg } = state.cfg;
+  const { pluggy: _p, github: _g, ...cfg } = state.cfg;
   state.cfg = cfg;
-  Object.assign(state.banco, { contas: [], txs: [], sinc: '', erros: [] });
-  await Promise.all([db.setKV('config', state.cfg), db.setKV('bancoContas', []), db.setKV('bancoTxs', []), db.setKV('bancoSinc', '')]);
+  Object.assign(state.banco, { contas: [], txs: [], sinc: '', erros: [], lidos: {} });
+  await Promise.all([db.setKV('config', state.cfg), db.setKV('bancoContas', []), db.setKV('bancoTxs', []), db.setKV('bancoSinc', ''), db.setKV('bancoLidos', {})]);
   mudouBanco();
 }
 
