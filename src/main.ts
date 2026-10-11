@@ -321,6 +321,7 @@ document.addEventListener('click', async e => {
     if (ds.armed) { await app.desconectarBanco(); toast('Bancos desconectados'); back(); }
     else { ds.armed = '1'; t.textContent = 'Toque de novo para confirmar'; }
   }
+  else if (t.id === 'btnEPreco') puxarPrecoEdicao(t as HTMLButtonElement);
   else if (t.id === 'btnMenu') abrirMenu();
   else if (t.id === 'btnMenuFechar') fecharMenu();
   else if (t.id === 'btnRefresh') fecharMenu(() => { if (!navigator.onLine) toast('Sem internet agora.'); else app.refresh('botao'); });
@@ -403,6 +404,30 @@ function syncEdit() {
   $('#ewValor label').textContent = t === 'S' ? 'Custo acrescentado (R$)' : 'Valor recebido (R$)';
   const q = parseNum($<HTMLInputElement>('#eQtd').value), p = parseNum($<HTMLInputElement>('#ePreco').value);
   $('#eTotal').textContent = (t === 'C' || t === 'V') && q > 0 && p > 0 ? `Total da operação: ${brl.format(q * p)}` : '';
+}
+
+/**
+ * Botão da tela de edição: preço do ativo na data do lançamento. Cripto: preço médio do dia;
+ * ações, FIIs e ETFs: fechamento do pregão; Tesouro: PU de compra (ou de venda, numa venda).
+ */
+async function puxarPrecoEdicao(btn: HTMLButtonElement) {
+  const t = $<HTMLSelectElement>('#eTipo').value, d = $<HTMLInputElement>('#eData').value;
+  const a = cleanTicker($<HTMLInputElement>('#eAtivo').value), c = $<HTMLSelectElement>('#eClasse').value as Classe;
+  const nota = $('#ePrecoNota');
+  nota.hidden = false;
+  if (!a || !d) { nota.textContent = 'Informe o ativo e a data primeiro.'; return; }
+  btn.disabled = true; btn.classList.add('spin');
+  nota.textContent = 'Buscando a cotação do dia…';
+  const r = await app.hist.precoNoDia(a, c, d, t === 'V').catch(() => null);
+  btn.disabled = false; btn.classList.remove('spin');
+  if (!nota.isConnected) return;
+  if (!r) { nota.textContent = `Não achei a cotação de ${a} em ${fmtD(d)}. O preço continua o que estava.`; return; }
+  const inp = $<HTMLInputElement>('#ePreco');
+  const antes = inp.value;
+  inp.value = String(Number(r.p.toFixed(c === 'cripto' ? 2 : 4))).replace('.', ',');
+  const outroDia = r.d !== d ? ` (último dia com negociação antes de ${fmtD(d)})` : '';
+  nota.textContent = `${brl.format(r.p)}: ${r.fonte} em ${fmtD(r.d)}${outroDia}.${antes && antes !== inp.value ? ` Antes estava ${antes}. Toque em Salvar para confirmar.` : ''}`;
+  syncEdit();
 }
 
 async function salvarEdicao(e: Event) {

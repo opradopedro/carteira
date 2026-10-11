@@ -253,3 +253,6 @@ details.rotina summary, details.panel summary{cursor:pointer;color:var(--accent)
 details.panel[open] summary{margin-bottom:8px}
 details.rotina textarea{margin-top:8px;font-size:12px}
 .passos code, .sub code{font-size:12.5px;background:var(--soft);border-radius:5px;padding:1px 5px;overflow-wrap:anywhere}
+.com-botao{display:flex;gap:6px;align-items:stretch}
+.com-botao input{flex:1;min-width:0}
+.com-botao .btn.icon{flex:none;width:44px;min-height:44px}

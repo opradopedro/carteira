@@ -186,12 +186,16 @@ export function tesouroDiario(text) {
 
 /** Fechamentos diários do Mercado Bitcoin: { d: [datas], p: [preços] }. */
 export function parseMbDiario(json) {
-  const d = [], p = [];
+  // p = fechamento do dia; m = preço médio do dia ((abertura + máxima + mínima + fechamento) / 4).
+  const d = [], p = [], m = [];
   (json.t || []).forEach((t, i) => {
     const c = parseFloat(json.c[i]);
-    if (c > 0) { d.push(new Date(t * 1000).toISOString().slice(0, 10)); p.push(c); }
+    if (!(c > 0)) return;
+    const o = parseFloat(json.o?.[i]), h = parseFloat(json.h?.[i]), l = parseFloat(json.l?.[i]);
+    d.push(new Date(t * 1000).toISOString().slice(0, 10)); p.push(c);
+    m.push(o > 0 && h > 0 && l > 0 ? Math.round(((o + h + l + c) / 4) * 1e8) / 1e8 : c);
   });
-  return { d, p };
+  return { d, p, m };
 }
 
 /**

@@ -64,7 +64,9 @@ describe('utilitários', () => {
     expect(monthRange('2025-11', '2026-02')).toEqual(['2025-11', '2025-12', '2026-01', '2026-02']);
   });
   it('velas diárias do Mercado Bitcoin', () => {
-    expect(parseMbDiario({ t: [Date.UTC(2026, 2, 10) / 1000], c: ['350000.5'] })).toEqual({ d: ['2026-03-10'], p: [350000.5] });
+    expect(parseMbDiario({ t: [Date.UTC(2026, 2, 10) / 1000], c: ['350000.5'] })).toEqual({ d: ['2026-03-10'], p: [350000.5], m: [350000.5] });
+    // média do dia = (abertura + máxima + mínima + fechamento) / 4
+    expect(parseMbDiario({ t: [Date.UTC(2026, 2, 10) / 1000], o: ['100'], h: ['120'], l: ['90'], c: ['110'] }).m).toEqual([105]);
   });
   it('velas mensais do Mercado Bitcoin', () => {
     const r = parseMbCandles({ t: [Date.UTC(2026, 8, 1) / 1000], c: ['433994.00'] }, '2026-08', '2026-09');

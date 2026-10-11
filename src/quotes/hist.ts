@@ -127,10 +127,12 @@ export class Historico {
     };
     const ano = parseInt(iso.slice(0, 4), 10);
     if (c === 'cripto') {
-      const d = await getJson<Record<string, { d: string[]; p: number[] }>>('cripto-d.json');
+      // Cripto negocia o dia inteiro: usa o preço médio do dia (quando disponível), não só o fechamento.
+      const d = await getJson<Record<string, { d: string[]; p: number[]; m?: number[] }>>('cripto-d.json');
       const s = d?.[a];
-      const r = s ? ultimoAte(s.d, s.p) : null;
-      return r && r.d >= addDaysIso(iso, -7) ? { ...r, fonte: 'Mercado Bitcoin' } : null;
+      const media = !!s?.m?.length;
+      const r = s ? ultimoAte(s.d, media ? s.m! : s.p) : null;
+      return r && r.d >= addDaysIso(iso, -7) ? { ...r, fonte: media ? 'preço médio do dia no Mercado Bitcoin' : 'fechamento do Mercado Bitcoin' } : null;
     }
     for (const y of [ano, ano - 1]) {
       if (c === 'tesouro') {
@@ -143,7 +145,7 @@ export class Historico {
         const d = await getJson<{ d: string[]; p: Record<string, (number | null)[]> }>(`b3d/${y}/${letra}.json`);
         const vals = d?.p[a];
         const r = d && vals ? ultimoAte(d.d, vals) : null;
-        if (r) return r.d >= addDaysIso(iso, -15) ? { ...r, fonte: 'fechamento B3' } : null;
+        if (r) return r.d >= addDaysIso(iso, -15) ? { ...r, fonte: 'fechamento do pregão na B3' } : null;
       }
     }
     return null;

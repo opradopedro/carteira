@@ -356,7 +356,11 @@ function paginaLanc(el: HTMLElement, id: string) {
       <div class="field"><label for="eClasse">Classe</label>
         <select id="eClasse">${Object.entries(CLASSES).map(([k, v]) => `<option value="${k}" ${k === l.c ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <div class="field" id="ewQtd" ${ehP ? 'hidden' : ''}><label for="eQtd">Quantidade</label><input id="eQtd" inputmode="decimal" value="${num(l.q)}"></div>
-      <div class="field" id="ewPreco" ${ehP || ehS ? 'hidden' : ''}><label for="ePreco">Preço unitário (R$)</label><input id="ePreco" inputmode="decimal" value="${num(l.p)}"></div>
+      <div class="field" id="ewPreco" ${ehP || ehS ? 'hidden' : ''}><label for="ePreco">Preço unitário (R$)</label>
+        <div class="com-botao"><input id="ePreco" inputmode="decimal" value="${num(l.p)}">
+          <button type="button" class="btn icon" id="btnEPreco" aria-label="Puxar a cotação da data" title="Puxar a cotação da data">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button></div></div>
+      <div class="note full" id="ePrecoNota" hidden></div>
       <div class="field full" id="ewValor" ${ehP || ehS ? '' : 'hidden'}><label for="eValor">${ehS ? 'Custo acrescentado (R$)' : 'Valor recebido (R$)'}</label><input id="eValor" inputmode="decimal" value="${num(l.v)}"></div>
       <div class="note full" id="eTotal"></div>
       <div class="row full">
